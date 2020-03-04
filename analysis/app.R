@@ -571,7 +571,7 @@ server <- function(session, input, output) {
             }
         })
         
-        facet_func(df = df_RFU_plot,# reacts to the appearance and changes to the dataframe, to the uploading of format files
+        facet_func(df = df_RFU_plot, # reacts to the appearance and changes to the dataframe, to the uploading of format files
                    mean_or_each = input$mean_or_each,
                    color_by = !!input$color_by,
                    linetype_by = !!input$linetype_by,
@@ -590,25 +590,117 @@ server <- function(session, input, output) {
                    y_title = input$y_title)
     })
     
-  
-    
-    output$data <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
-        req(values$df)
-        plot() #%>% withSpinner(color="#525252")
-        
-    }, height = function() {
-        if (input$facet == "none") {
-            height <<- 400#session$clientData$output_plot1_width * (1/1.618)
-        } else {
-            # adapted from https://github.com/rstudio/shiny/issues/650
-            h_dyn <<- gg_facet_nrow_ng(plot()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot())))*(1/1.618)
-            if (h_dyn < session$clientData$output_data_width * (1/1.618) ) { height <- session$clientData$output_data_width * (1/1.618)
-            } else { height <<- h_dyn}
+    # make an initial plot
+    observeEvent( values$data_raw, { # when new data is uploaded
+        output$data <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
+            req(values$df)
+            # 
+            # df_RFU_plot <- unnest(values$df) %>%
+            #     plyr::mutate("-" = rep("", nrow(.))) %>%
+            #     plyr::mutate("- " = rep("", nrow(.)))
             
-        }
-        height
+            facet_func(df = unnest(values$df), # reacts to the appearance and changes to the dataframe, to the uploading of format files
+                       mean_or_each = input$mean_or_each,
+                       color_by = !!input$color_by,
+                       linetype_by = !!input$linetype_by,
+                       use_linetypes = input$use_linetypes,
+                       facet = input$facet,
+                       facet_by = !!input$wrap_by,
+                       facet_rows = !!input$grid_rows,
+                       facet_cols = !!input$grid_cols,
+                       set_title = plot_title_d(),
+                       legend_title = plot_legend_d(),
+                       legend_linetype_title = plot_legend_linetype(),
+                       fix_free = input$fix_free,
+                       text_size = input$text_size,
+                       legend_position = legend_position(),
+                       x_title = input$x_title,
+                       y_title = input$y_title)
+            
+        }, height = function() {
+            if (input$facet == "none") {
+                height <<- 400#session$clientData$output_plot1_width * (1/1.618)
+            } else {
+                # adapted from https://github.com/rstudio/shiny/issues/650
+                h_dyn <<- gg_facet_nrow_ng(plot()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot())))*(1/1.618)
+                if (h_dyn < session$clientData$output_data_width * (1/1.618) ) { height <- session$clientData$output_data_width * (1/1.618)
+                } else { height <<- h_dyn}
+            }
+            height
+        }) 
     })
     
+    observeEvent( input$update_plot, {  # when the update plot button is pressed'
+            
+            df_RFU_plot <- unnest(values$df) %>%
+                plyr::mutate("-" = rep("", nrow(.))) %>%
+                plyr::mutate("- " = rep("", nrow(.)))
+            
+            ####### Tm calculations 
+            
+            observeEvent( values$df, {
+                print("observed!")
+                
+                # starting from values$df gives this calculation a fresh slate should the user re-format their data multiple times
+                values$df_tms <- values$df %>% #df_int %>% # add the first derivative Tms
+                    plyr::mutate(sgd1 = purrr::map(data, sgfilt_nest, m_ = 1)) %>% # add the first derivative data
+                    plyr::mutate(dRFU_tma = as_vector(purrr::map2(data, sgd1, Tm_by_dRFU)))
+                
+                if ("condition" %in% names(values$df_tms)) {
+                    # make the averaged table
+                    values$tm_table_dRFU <- values$df_tms %>%
+                        select(condition, dRFU_tma)  %>%
+                        group_by(condition)  %>%
+                        summarise( mean_tm = mean(dRFU_tma) ,
+                                   sd_tm = sd(dRFU_tma)) %>%
+                        mutate_if(is.numeric, round, 2)
+                } else {
+                    values$tm_table_dRFU <- values$df_tms %>%
+                        select(well, dRFU_tma)  %>%
+                        group_by(well)  %>%
+                        summarise( mean_tm = mean(dRFU_tma) ,
+                                   sd_tm = sd(dRFU_tma)) %>%
+                        mutate_if(is.numeric, round, 2)  
+                }
+            })
+            
+            plot <- facet_func(df = df_RFU_plot, # reacts to the appearance and changes to the dataframe, to the uploading of format files
+                       mean_or_each = input$mean_or_each,
+                       color_by = !!input$color_by,
+                       linetype_by = !!input$linetype_by,
+                       use_linetypes = input$use_linetypes,
+                       facet = input$facet,
+                       facet_by = !!input$wrap_by,
+                       facet_rows = !!input$grid_rows,
+                       facet_cols = !!input$grid_cols,
+                       set_title = plot_title_d(),
+                       legend_title = plot_legend_d(),
+                       legend_linetype_title = plot_legend_linetype(),
+                       fix_free = input$fix_free,
+                       text_size = input$text_size,
+                       legend_position = legend_position(),
+                       x_title = input$x_title,
+                       y_title = input$y_title)
+        
+        ##
+        output$data <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
+            plot #%>% withSpinner(color="#525252")
+        }, height = function() {
+            if (input$facet == "none") {
+                height <<- 400#session$clientData$output_plot1_width * (1/1.618)
+            } else {
+                # adapted from https://github.com/rstudio/shiny/issues/650
+                h_dyn <<- gg_facet_nrow_ng(plot()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot())))*(1/1.618)
+                if (h_dyn < session$clientData$output_data_width * (1/1.618) ) { height <- session$clientData$output_data_width * (1/1.618)
+                } else { height <<- h_dyn}
+
+            }
+            height
+        })
+
+    })
+    
+ 
     callModule(plotDownload, "plot1", data)
     
     output$trim_ends <-renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
