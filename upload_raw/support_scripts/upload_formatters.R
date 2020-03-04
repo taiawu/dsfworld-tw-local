@@ -26,21 +26,22 @@ read_qTower <- function(filename) {
     as_tibble(.) %>%
     set_names(., c("Temperature", .[1,][-1])) %>%
     . [-1,] %>%
-    mutate_all( . , as.numeric)
-  
+    mutate_if(is.factor, as.character) %>%
+    mutate_all(as.numeric) %>%
+    round(3)
   df
 }
 
 # quantStudio
 read_quantStudio <- function(filename) { # completed
   df_raw <- readxl::read_excel(filename, skip=5, sheet = 4) %>%
-          . [is.na(.[3]) == FALSE, c(2,4,5)] %>%
-          set_names( . , c("Well", "Temperature", "RFU")) %>% 
-          .[-1,] %>%
-          pivot_wider(names_from = "Well", values_from = RFU) %>%
-          mutate_if(is.factor, as.character) %>%
-          mutate_all(as.numeric) %>%
-          round(3)
+    . [is.na(.[3]) == FALSE, c(2,4,5)] %>%
+    set_names( . , c("Well", "Temperature", "RFU")) %>% 
+    .[-1,] %>%
+    pivot_wider(names_from = "Well", values_from = RFU) %>%
+    mutate_if(is.factor, as.character) %>%
+    mutate_all(as.numeric) %>%
+    round(3)
 }
 
 
@@ -66,17 +67,35 @@ format_stratagene <- function(df) {
   well_names <- c("Temperature" , well_names[c(TRUE, FALSE)]) # remove empty columns from well names
   df <- df[-c(1,2),] #  remove leading empty rows
   temperatures <- data.frame( "Temperatures" = df[1]) # extract temperatures
-
+  
   to_delete <- seq(1, ncol(df), 2) # remove duplicated temperature rows
   df <- df[,-to_delete] # remove duplicated temperature rows
-
+  
   df <- dplyr::bind_cols(temperatures, df) # append temperature column
   df <- set_names(df, nm = well_names) # re-set the names
 }
 
 format_none <- function(filepath) { 
-  }
+}
 
 format_biorad <- function(df) {
   df[,-1]
+}
+
+
+#### making the various well names 
+make_well_names <- function(row_style, num_style) {
+  if (row_style == "rows") { rows <-  letters[1:16] } else {rows <- LETTERS[1:16] }
+  if (num_style == "01") { cols <- c(c("01", "02", "03", "04", "05", "06", "07", "08", "09"), c(10:24)) } else {cols <- c(1:24) }
+  
+  list(row = rows,
+       col =cols) %>%
+    cross() %>% # general all possible combos of rows and columns
+    map(lift(paste0)) %>% # pate them together
+    
+    as_vector() %>%
+    as_tibble() %>%
+    mutate(nchar = lapply(.$value, nchar) %>% as_vector())  %>%
+    dplyr::arrange(nchar, value) %>%
+    .[[1]]
 }

@@ -1484,6 +1484,7 @@ server <- function(session, input, output) {
         print("finished with initial uploads")
         
     })
+    
     observeEvent(values$df, {
         print("entering the modeling ring")
         win3d <<- 7#floor(3/((n2r(1) - n2r(0))/n_meas))
