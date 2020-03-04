@@ -1,0 +1,134 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(tidyverse)
+```
+```{r}
+# given a file path to the layout, make the layout dataframe
+source("../2_add_layouts/support_scripts/layout_handling.R")
+source("../1_upload_raw/support_scripts/upload_formatters.R")
+lo384 <- make_layout("sample_layout.csv")
+lo384E <- make_layout("sample_layout_empties.csv") # lets just keep the "empty" convention, since i don't know how different computers/excel versions deal with empty cells 
+lo96 <- make_layout("sample_layout_96.csv")
+lo384
+```
+
+```{r}
+# the nested raw data, by well
+# at this point, there is no guarantee that "well" will actually be well names. it is user-defined from the input. 
+data_raw <- read.csv("sample_data_file.csv")
+by_well <- nest_raw(data_raw)
+
+by_well
+```
+```{r}
+parse_well_vec <- function( well_vec ){
+  l <- list(
+    col =  parse_number(well_vec),
+    row = str_extract_all(well_vec, "[A-Z; a-z]", simplify = TRUE) 
+                          %>% str_to_upper(locale = "en") 
+                          %>% as_vector()
+  )
+   l
+}
+
+add_standardized_wells <- function( df, make_factor ) {
+  df %>%
+      mutate(row_ = parse_well_vec(.$well)$row,
+              col_ = parse_well_vec(.$well)$col) %>%
+      mutate(well_ = map2(.$row_, .$col_, paste0) %>% as_vector()) %>%
+      mutate(well_f_ = factor(.$well_, levels = make_well_names("ROWS", "1"))) # as a factor, so things will order correctly
+}
+
+# test this function
+by_well_a1 <- by_well %>% mutate(well = c("a1", "a2", "a3"))
+by_well_A01 <- by_well %>% mutate(well = c("A01", "A02", "A03"))
+by_well_a01 <- by_well %>% mutate(well = c("a01", "a02", "a03"))
+
+add_standardized_wells( by_well )
+add_standardized_wells( by_well_a1 )
+add_standardized_wells( by_well_A01 )
+add_standardized_wells( by_well_a01 )
+```
+```{r}
+parse_number(make_well_names("ROWS", "1"))
+parse_number(make_well_names("ROWS", "01"))
+extract(make_well_names("ROWS", "01"), c("A", "B"), "([[:alnum:]]+)-([[:alnum:]]+)")
+```
+
+```{r}
+df <- data.frame(x = c(NA, "a-b", "a-d", "b-c", "d-e"))
+df
+df %>% extract(x, "A")
+df %>% extract(x, c("A", "B"), "([[:alnum:]]+)-([[:alnum:]]+)")
+WELLS1 <- make_well_names("ROWS", "1")
+
+str_extract_all(WELLS1, "[A-Z; a-z]", simplify = TRUE)
+
+#>      [,1] [,2] [,3]
+```
+
+
+```{r}
+# add the leyout information to the nested user data
+make_unnested_means <- function( by_well ) {
+    unnest( by_well )  %>%
+                group_by(Temperature, well) %>% # once the layout is uploaded, handle the replicates
+                          dplyr::summarize(mean = mean(value),
+                                           sd = sd(value)) %>%
+                ungroup() 
+}
+  
+by_well_mean <- make_unnested_means(by_well)
+by_well_mean
+
+
+
+standardize_well_names <- function( by_well ) {
+
+}
+add_layout <- function(by_well, layout) { 
+  
+}
+    # observeEvent( input$layout_file, { 
+
+##### REQUIRE CONDITION COLUMN!!
+
+    #     ###### once a layout is available, update the df to incorporate it this can all be triggered to occur together by the availability of the layout file, in a single action.
+    #     values$df <- select(unnest(values$df_1), c("Temperature", "value","well")) %>% # always pull from the un-named values$df_1, to avoid collisions when new formats are uploaded
+    #         merge(layout(), by = "well") %>%  # this dataframe is now missing most of the variable and indexing columns
+    #         group_by_at(vars(one_of(names(select_if(., is_character))))) %>% # group by all of the character-type columns (not great for concentration or numeric variables..?)
+    #         mutate(value_norm = BBmisc::normalize(value, method = "range", range = c(0,1)), ###### if we do this as a mutate, it ignores the groups!!!!!!!
+    #                Temperature_norm = BBmisc::normalize(Temperature, method = "range", range = c(0,1)))  %>%
+    #         nest() %>%
+    #         plyr::mutate(new_names = well)
+    #     
+    #     means <- unnest(values$df)  %>%
+    #         group_by(Temperature, condition) %>% # once the layout is uploaded, handle the replicates
+    #         dplyr::summarize(mean = mean(value),
+    #                          sd = sd(value)) %>%
+    #         ungroup()
+    #     
+    #     values$df <- values$df %>% 
+    #         unnest() %>%
+    #         merge(means, by = c("x" = "Temperature", "y"  = "condition")) %>%
+    #         group_by_at(vars(one_of(names(select_if(., is_character))))) %>%
+    #         nest
+    # })
+```
+
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
