@@ -32,7 +32,6 @@ read_qTower <- function(filename) {
 
 # quantStudio
 read_quantStudio <- function(filename) { # completed
-  
   df_raw <- read_excel(filename, skip=5, sheet = 4) %>% # read the third sheet of the excel file
     . [is.na(.$X__1) == FALSE, c(2,4,5)] %>% # isolate only the rows which contain the long-form data
     set_names( . , c("Well", "Temperature", "RFU")) %>% # set the column names 
@@ -76,7 +75,8 @@ format_stratagene <- function(df) {
   df <- set_names(df, nm = well_names) # re-set the names
 }
 
-format_none <- function(df) { df }
+format_none <- function(filepath) { 
+  }
 
 format_biorad <- function(df) {
   df[,-1]
