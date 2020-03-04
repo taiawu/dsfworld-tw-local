@@ -4,7 +4,6 @@ library(shinyBS) # drop-down panels
 library(shinyalert) # pop-up windows
 library(tidyverse) #  handling data structures and plotting
 library(shiny) # for shiny web-apps 
-
 source("support_scripts/upload_formatters.R") # scripts written to analyze and visualize DSF data
 
 # generate vectors of possible well names, for matching to layouts
@@ -92,6 +91,7 @@ ui <- navbarPage(
                  )
 
 server <- function(input, output) {
+    values <- reactiveValues() # initalize the reactive values container (is this effectively a class? is shiny OOP-like...?) wish i'd realized that earlier)
     
     ########### data uploading  ----------
     # download a sample file
@@ -104,8 +104,6 @@ server <- function(input, output) {
             write.csv(read_csv("sample_file.csv"), file, row.names = FALSE)
         }
     )
-    
-    values <- reactiveValues() # initalize the reactive values container (is this effectively a class? is shiny OOP-like...?) wish i'd realized that earlier)
     
     data_raw <- reactive({
         print("uploading raw file")
@@ -210,8 +208,9 @@ server <- function(input, output) {
             }
         )
     })
+    
+    
     ### the first steps of the analysis app, to make sure they stitch together ok
-   
         output$input_file <- renderDataTable({
             req(input$uploaded_file)
             tryCatch(
@@ -222,9 +221,6 @@ server <- function(input, output) {
             )
         }, options = list(scrollX = TRUE, scrollY = 500, scrollCollapse = TRUE, paging = FALSE, dom = 't')
         )
-        
-        
-
 }
 
 shinyApp(ui, server)
