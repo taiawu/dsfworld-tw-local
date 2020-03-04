@@ -410,6 +410,16 @@ server <- function(session, input, output) {
     
 
 ####### this responds to the upoading of a layout file
+    # lo384 <- make_layout("sample_layout.csv") %>%
+    #     add_standardized_wells()
+    # 
+    # data_raw <- read.csv("sample_data_file.csv")
+    # 
+    # by_well <- nest_raw(data_raw) %>%
+    #     add_standardized_wells()
+    # 
+    # by_well_layout <- join_layout_nest(by_well, lo384) 
+    # by_well_layout
     
     layout <- reactive({
         req(input$layout_file)

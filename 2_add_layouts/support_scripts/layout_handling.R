@@ -23,7 +23,7 @@ make_layout <- function( filename ) { # from path to raw layout to a final fomat
       set_names(c(names(layout), names(layout_list)[[i]])) # rename based on the column of interest
   }
   layout <- layout %>% 
-            unite("unique", c(4:ncol(.)), remove = FALSE) %>% # create a unique column, used to define groups after averaging
+            unite("condition", c(4:ncol(.)), remove = FALSE) %>% # create a unique column, used to define groups after averaging
             mutate_if(is.factor, as.character)
             
   layout
@@ -38,6 +38,40 @@ nest_raw <- function( data_raw ) {
     nest_legacy() %>%
     plyr::mutate(new_names = well)
 }
+
+parse_well_vec <- function( well_vec ){
+  l <- list(
+    col =  parse_number(well_vec),
+    row = str_extract_all(well_vec, "[A-Z; a-z]", simplify = TRUE) 
+    %>% str_to_upper(locale = "en") 
+    %>% as_vector()
+  )
+  l
+}
+
+add_standardized_wells <- function( df, make_factor ) {
+  df %>%
+    mutate(row_ = parse_well_vec(.$well)$row,
+           col_ = parse_well_vec(.$well)$col) %>%
+    mutate(well_ = map2(.$row_, .$col_, paste0) %>% as_vector()) %>%
+    mutate(well_f_ = factor(.$well_, levels = make_well_names("ROWS", "1"))) # as a factor, so things will order correctly
+}
+
+join_layout_nest <- function(by_well, layout) { 
+  by_well %>%
+    unnest_legacy() %>%
+    dplyr::left_join(., layout, by = c("well_", "well_f_", "row_", "col_")) %>%
+    rename( well.original = well.x,
+            well.layout = well.y ) %>%
+    group_by(condition, Temperature) %>%
+    dplyr::mutate(mean = mean(value),
+                  sd = sd(value),
+                  mean_norm = mean(value_norm),
+                  sd_norm = sd(value_norm)) %>%
+    ungroup() %>%
+    nest(data = c(Temperature, value, mean, sd, Temperature_norm, value_norm, mean_norm, sd_norm)) # THIS IS NOT nest_legacy
+}
+
 
 dsfworld_default <- theme( # adapted from free amino acids hit call
   text = element_text(size = 10),
