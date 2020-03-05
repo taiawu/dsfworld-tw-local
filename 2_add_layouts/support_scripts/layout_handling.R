@@ -36,7 +36,8 @@ nest_raw <- function( data_raw ) {
     mutate(value_norm = BBmisc::normalize(value, method = "range", range = c(0,1)), ###### if we do this as a mutate, it ignores the groups!!!!!!!
            Temperature_norm = BBmisc::normalize(Temperature, method = "range", range = c(0,1)))  %>%
     nest_legacy() %>%
-    plyr::mutate(new_names = well)
+    #plyr::mutate(new_names = well)
+    plyr::mutate(condition = well)
 }
 
 parse_well_vec <- function( well_vec ){
@@ -69,14 +70,20 @@ ensure_standardized_wells <- function( df ) {
 }
 
 join_layout_nest <- function(by_well, layout) { 
-  by_well_ <- ensure_standardized_wells(by_well)
+  by_well_ <- ensure_standardized_wells(by_well) # this will always be fresh, un-layout-joined dataframe
   layout_ <- ensure_standardized_wells(layout)
   dup_cols <- names(layout_)[!c(names(layout_) %in% c("well_", "well_f_", "row_", "col_"))]
   
-  if (!"condition" %in% names(layout_)) {
-    print("no_cond")
+  if (!"condition" %in% names(layout_)) { # this should never happen....
+    print("no_cond see join_layout_nest in layout_handling.R")
     layout_ <- layout_ %>%
-      unite("condition", -one_of(c("well","well_", "well_f_", "row_", "col_")), remove = FALSE)
+      unite("condition", -one_of(c("well","well_", "well_f_", "row_", "col_", "row", "column")), remove = FALSE)
+  } else {
+    print("refreshing condition column")
+    layout_ <- layout_ %>%
+               select(-condition) %>% # clear the existing condition colujmn
+               unite("condition", -one_of(c("well","well_", "well_f_", "row_", "col_", "row", "column")), remove = FALSE) %>% # create a unique column, used to define groups after averaging
+               mutate_if(is.factor, as.character)
   }
   
   by_well_ %>%

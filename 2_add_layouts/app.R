@@ -280,16 +280,24 @@ server <- function(session, input, output) {
         req(values$df)
         actionButton("update_plot", p("Update plot", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),  width = '100%')
     })
+
     
-    df_rtest <- data.frame(id = c("a", "b"),
-                    val = c(0.75, 0.25), stringsAsFactors = FALSE)
-    
-    #output$r_table <- renderRHandsontable({rhandsontable(values$df %>% select_if(is.character)})
     output$r_table <- renderRHandsontable({
-        req(values$df)
-       rhandsontable( values$df %>% select_if(is.character), height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)
-        #rhandsontable( values$df_1, height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)
-    })
+         req(values$df)
+         if (is.null(input$layout_file) == FALSE) { # if there is a layout file
+
+             layout_vars <- names(layout())[!c(names(layout()) %in% c("well_", "well_f_", "row_", "col_", "row", "column"))]
+             
+             handson_df <- values$df %>%
+                            select( one_of( layout_vars )) # this will always include "condition"
+
+        } else { # if no layout file
+                handson_df <- values$df %>%
+                                select(well, condition) 
+         }
+
+        rhandsontable( handson_df, height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)            
+     })
     
     output$current_names <- renderTable({values$df %>% select_if(is.character)})
     
@@ -435,133 +443,24 @@ server <- function(session, input, output) {
     })
     
     observeEvent(input$submit_handson_names, { # when table1 is updated
-        
+        print("updating handson names")
         new_names_raw <- hot_to_r(input$r_table) %>%
                             as_tibble() %>%
                             ensure_standardized_wells() 
       
         # write_rds(new_names_raw, "new_names_raw_handson.rds")
         # write_rds(values$df_1, "values_df_1.rds")
-        # print(names(new_names_raw))
-        
-        values$df <- join_layout_nest( values$df_1, new_names_raw )
-        
-        # if ("condition" %in% names(new_names_raw)) {
-        #     new_names <- new_names_raw %>%
-        #         #select(-condition, -well)  %>% # remove the old condition column, and the well column
-        #         unite("condition", 1:ncol(.), remove = FALSE)
-        # 
-        # } else {
-        #     print("nope")
-        #     new_names <- new_names_raw %>%
-        #         #select(-well) %>%
-        #         unite("condition", 1:ncol(.), remove = FALSE)
-        #     # print("new_names")
-        #     # print(new_names)
-        #     # print(str(new_names))
-        # }
-        
-        # if (! "condition" %in% names(new_names_raw)) {
-        #     new_names <- new_names_raw %>%
-        #         #select(-condition, -well)  %>% # remove the old condition column, and the well column
-        #         unite("condition", 1:ncol(.), remove = FALSE) }
-        #unite("condition", c(4:ncol(.)), remove = FALSE)
-            
-       # values$df <- join_layout_nest(values$df_1, new_names ) 
-        # if ("condition" %in% names(new_names_raw)) {
-        #     new_names <- new_names_raw %>%
-        #         select(-condition, -well)  %>% # remove the old condition column, and the well column
-        #         unite("condition", 1:ncol(.), remove = FALSE)
-        # 
-        # } else {
-        #     print("nope")
-        #     new_names <- new_names_raw %>%
-        #         select(-well) %>%
-        #         unite("condition", 1:ncol(.), remove = FALSE)
-        #     print("new_names")
-        #     print(new_names)
-        #     print(str(new_names))
-        # }
-        # 
-        # overwrite <- names(new_names) %>% # determine the columns to overwrite
-        #     intersect(names(values$df))
-        # print("overwrite")
-        # print(overwrite)
-        # print(names(dplyr::select(values$df, -overwrite)))
-        # print(names(new_names))
-        # 
-        # # a previous version of this  stopped working, i think because of a difference in the default handling behavior of grouped dataframes...?
-        # values$df <- values$df %>%
-        #     ungroup() %>%
-        #     dplyr::select( -overwrite) %>%
-        #     bind_cols(new_names)
-        # 
-        # 
-        # means <- unnest(values$df)  %>%
-        #     group_by(Temperature, condition) %>% # once the layout is uploaded, handle the replicates
-        #     dplyr::summarize(mean = mean(value),
-        #                      sd = sd(value)) %>%
-        #     ungroup()
-        # 
-        # df_interm <- values$df %>%
-        #     unnest()
-        # 
-        # if ("mean" %in% names(df_interm)) {
-        #     print("mean is present")
-        #     values$df <- df_interm %>%
-        #         select( -mean, -sd) %>%
-        #         merge(means, by = c("x" = "Temperature", "y"  = "condition")) %>%
-        #         group_by_at(vars(one_of(names(select_if(., is_character))))) %>%
-        #         nest
-        #     #nest_legacy()
-        # 
-        # } else {
-        #     print("mean is not present")
-        #     values$df <- df_interm %>%
-        #         merge(means, by = c("x" = "Temperature", "y"  = "condition")) %>%
-        #         group_by_at(vars(one_of(names(select_if(., is_character))))) %>%
-        #         nest
-        #     #nest_legacy()
-       # }
-    }, ignoreInit = TRUE, ignoreNULL = TRUE
-    )
-    
-    observeEvent(input$submit_handson_names, { # when table1 is updated
-        # new_names_raw <- hot_to_r(input$r_table) %>%
-        #     as.data.frame()
-       # handson_layout <- hot_to_r(input$r_table) 
-        # %>% # this will not have the standardized wells 
-        #                             as.data.frame() 
-        # print("handson struc")
-        # print(str(handson_layout))
-        # # %>%
-        # #                             add_standardized_wells() 
-        # 
-        # if (! "condition" %in% names(handson_layout)) { 
-        #     print("no condition")
-        #     handson_layout <- handson_layout %>% 
-        #         mutate(condition = .$well_)}
-        # print("end no condition")
-        # print("handson struc post cond")
-        # print(str(handson_layout))
-        # 
-        # 
-        # values$df <- join_layout_nest(values$df_1, handson_layout )
-        # print("joined with values$df")
-        # print(str(values$df))
-        # print("end vlues$df str")
-        # print("selecting characters")
-        # print(str(values$df))
-        # print(names(values$df))
-        # values$df %>% 
-        #     select_if(is.character)
-        
+        print(names(new_names_raw))
 
+        values$df <- join_layout_nest( values$df_1, new_names_raw )
+                        
+        print("updated volues df condition column")
+        print(values$df$condition)
+ 
     }, ignoreInit = TRUE, ignoreNULL = TRUE
     )
     
-    
-    
+
     # plot <- reactive({
     #     req(values$df) # only render the plot if there is data
     #     
