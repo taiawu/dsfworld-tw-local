@@ -57,12 +57,32 @@ add_standardized_wells <- function( df, make_factor ) {
     mutate(well_f_ = factor(.$well_, levels = make_well_names("ROWS", "1"))) # as a factor, so things will order correctly
 }
 
+ensure_standardized_wells <- function( df ) {
+  if ( all(c("well_", "well_f_", "row_", "col_") %in% names(df)) == FALSE ) { # if standardized well columns are missing
+    df_out <- df %>%
+      add_standardized_wells()
+  } else {
+    df_out <- df
+  }
+  
+  df_out 
+}
+
 join_layout_nest <- function(by_well, layout) { 
-  by_well %>%
+  by_well_ <- ensure_standardized_wells(by_well)
+  layout_ <- ensure_standardized_wells(layout)
+  dup_cols <- names(layout_)[!c(names(layout_) %in% c("well_", "well_f_", "row_", "col_"))]
+  
+  if (!"condition" %in% names(layout_)) {
+    print("no_cond")
+    layout_ <- layout_ %>%
+      unite("condition", -one_of(c("well","well_", "well_f_", "row_", "col_")), remove = FALSE)
+  }
+  
+  by_well_ %>%
     unnest_legacy() %>%
-    dplyr::left_join(., layout, by = c("well_", "well_f_", "row_", "col_")) %>%
-    rename( well.original = well.x,
-            well.layout = well.y ) %>%
+    dplyr::select(-one_of(dup_cols )) %>% # if it's already in layout, drop it
+    dplyr::left_join(., layout_, by = c("well_", "well_f_", "row_", "col_")) %>%
     group_by(condition, Temperature) %>%
     dplyr::mutate(mean = mean(value),
                   sd = sd(value),

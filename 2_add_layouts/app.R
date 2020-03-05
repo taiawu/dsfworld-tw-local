@@ -11,6 +11,7 @@ source("support_scripts/dsfworld5_data_analysis.R") # scripts written to analyze
 source("support_scripts/20190929_dsfworld_modeling.R") # compute the interactive models; make the interactive modeling plot  
 source("support_scripts/DSF_data_parser_dsfw4_v2.R")
 source("support_scripts/dsfworld5_model_fitting.R")
+source("support_scripts/layout_handling.R")
 
 library(shinycssloaders) # spinning plot loading icon
 library(rhandsontable) # user-interactive tables 
@@ -234,6 +235,7 @@ server <- function(session, input, output) {
     values$data_raw <- df_sample
     
     observeEvent(values$data_raw, {
+        print("observe1")
         values$data_raw <- df_sample 
         # set the following values based on the data
         tryCatch({
@@ -246,6 +248,7 @@ server <- function(session, input, output) {
             if ( win3d < 5 ) { win3d <<- 5 }
             
             sgfilt_nest <<- sgfilt_set_n(n_ = find_sgolay_width( win3d ))
+            print("end observe1")
         },   
         error = function(e){
             print("win3 errored! setting win3d to 7")
@@ -255,24 +258,18 @@ server <- function(session, input, output) {
     }) # write to values
     
     observeEvent(values$data_raw, { # ultimately, observe the transfer to the analysis page
+        print("observe2")
         req(values$data_raw) # but leave this requirement as is
+        
         tryCatch({
-            values$df <- values$data_raw %>% # this is the active dataframe, used for plotting and calculations
-                gather(well, value, -Temperature) %>%
-                group_by(well) %>%
-                mutate(value_norm = BBmisc::normalize(value, method = "range", range = c(0,1)), ###### if we do this as a mutate, it ignores the groups!!!!!!!
-                       Temperature_norm = BBmisc::normalize(Temperature, method = "range", range = c(0,1)))  %>%
-                nest %>%
-                plyr::mutate(new_names = well)
+            values$df <- nest_raw(values$data_raw) %>% # active dataframe, used for plotting and calculations
+                         add_standardized_wells()
             
-            values$df_1 <- values$data_raw %>% # this is the original dataframe, used when a "clean slate" is needed, e.g. if a new layout file is uploaded
-                gather(well, value, -Temperature) %>%
-                group_by(well) %>%
-                mutate(value_norm = BBmisc::normalize(value, method = "range", range = c(0,1)), ###### if we do this as a mutate, it ignores the groups!!!!!!!
-                       Temperature_norm = BBmisc::normalize(Temperature, method = "range", range = c(0,1)))  %>%
-                nest %>%
-                plyr::mutate(new_names = well)
-        }, error = function(e){
+            values$df_1 <- nest_raw(values$data_raw) %>% # original dataframe, used when a "clean slate" is needed, e.g. if a new layout file is uploaded
+                add_standardized_wells()
+            print("end observe2")
+            
+        }, error = function(e) {
             shinyalert("Please ensure that your data is formatted correctly", "In the 'upload data' tab, you data should be displayed with Temperature in the first column, and RFU data in the columns to the right.")
         }
         )
@@ -284,9 +281,14 @@ server <- function(session, input, output) {
         actionButton("update_plot", p("Update plot", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),  width = '100%')
     })
     
-    output$r_table <- renderRHandsontable({ 
+    df_rtest <- data.frame(id = c("a", "b"),
+                    val = c(0.75, 0.25), stringsAsFactors = FALSE)
+    
+    #output$r_table <- renderRHandsontable({rhandsontable(values$df %>% select_if(is.character)})
+    output$r_table <- renderRHandsontable({
         req(values$df)
-        rhandsontable( values$df %>% select_if(is.character), height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)
+       rhandsontable( values$df %>% select_if(is.character), height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)
+        #rhandsontable( values$df_1, height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)
     })
     
     output$current_names <- renderTable({values$df %>% select_if(is.character)})
@@ -406,7 +408,7 @@ server <- function(session, input, output) {
         } else { legend_pos <- "right"}
         legend_pos})
     
-    ######## end eval selections, to pass to the plotting function #########   
+######## end eval selections, to pass to the plotting function #########   
     
 
 ####### this responds to the upoading of a layout file
@@ -423,454 +425,500 @@ server <- function(session, input, output) {
     
     layout <- reactive({
         req(input$layout_file)
-        layout <- make_layout(input$layout_file) # all columns are characters
+        
+        make_layout(input$layout_file$datapath) %>% # all columns are characters
+            add_standardized_wells()
     })
     
-    observeEvent( input$layout_file, { 
-        ###### once a layout is available, update the df to incorporate it this can all be triggered to occur together by the availability of the layout file, in a single action.
-        values$df <- select(unnest(values$df_1), c("Temperature", "value","well")) %>% # always pull from the un-named values$df_1, to avoid collisions when new formats are uploaded
-            merge(layout(), by = "well") %>%  # this dataframe is now missing most of the variable and indexing columns
-            group_by_at(vars(one_of(names(select_if(., is_character))))) %>% # group by all of the character-type columns (not great for concentration or numeric variables..?)
-            mutate(value_norm = BBmisc::normalize(value, method = "range", range = c(0,1)), ###### if we do this as a mutate, it ignores the groups!!!!!!!
-                   Temperature_norm = BBmisc::normalize(Temperature, method = "range", range = c(0,1)))  %>%
-            nest() %>%
-            plyr::mutate(new_names = well)
-        
-        means <- unnest(values$df)  %>%
-            group_by(Temperature, condition) %>% # once the layout is uploaded, handle the replicates
-            dplyr::summarize(mean = mean(value),
-                             sd = sd(value)) %>%
-            ungroup()
-        
-        values$df <- values$df %>% 
-            unnest() %>%
-            merge(means, by = c("x" = "Temperature", "y"  = "condition")) %>%
-            group_by_at(vars(one_of(names(select_if(., is_character))))) %>%
-            nest
+    observeEvent( layout(), { 
+        values$df <- join_layout_nest(values$df_1, layout() ) 
     })
     
     observeEvent(input$submit_handson_names, { # when table1 is updated
         
         new_names_raw <- hot_to_r(input$r_table) %>%
-            as.data.frame()
+                            as_tibble() %>%
+                            ensure_standardized_wells() 
+      
+        # write_rds(new_names_raw, "new_names_raw_handson.rds")
+        # write_rds(values$df_1, "values_df_1.rds")
+        # print(names(new_names_raw))
         
-        if ("condition" %in% names(new_names_raw)) {
-            new_names <- new_names_raw %>%
-                select(-condition, -well)  %>% # remove the old condition column, and the well column
-                unite("condition", 1:ncol(.), remove = FALSE)
+        values$df <- join_layout_nest( values$df_1, new_names_raw )
+        
+        # if ("condition" %in% names(new_names_raw)) {
+        #     new_names <- new_names_raw %>%
+        #         #select(-condition, -well)  %>% # remove the old condition column, and the well column
+        #         unite("condition", 1:ncol(.), remove = FALSE)
+        # 
+        # } else {
+        #     print("nope")
+        #     new_names <- new_names_raw %>%
+        #         #select(-well) %>%
+        #         unite("condition", 1:ncol(.), remove = FALSE)
+        #     # print("new_names")
+        #     # print(new_names)
+        #     # print(str(new_names))
+        # }
+        
+        # if (! "condition" %in% names(new_names_raw)) {
+        #     new_names <- new_names_raw %>%
+        #         #select(-condition, -well)  %>% # remove the old condition column, and the well column
+        #         unite("condition", 1:ncol(.), remove = FALSE) }
+        #unite("condition", c(4:ncol(.)), remove = FALSE)
             
-        } else {
-            print("nope")
-            new_names <- new_names_raw %>%
-                select(-well) %>%
-                unite("condition", 1:ncol(.), remove = FALSE)
-            print("new_names")
-            print(new_names)
-            print(str(new_names))
-        }
+       # values$df <- join_layout_nest(values$df_1, new_names ) 
+        # if ("condition" %in% names(new_names_raw)) {
+        #     new_names <- new_names_raw %>%
+        #         select(-condition, -well)  %>% # remove the old condition column, and the well column
+        #         unite("condition", 1:ncol(.), remove = FALSE)
+        # 
+        # } else {
+        #     print("nope")
+        #     new_names <- new_names_raw %>%
+        #         select(-well) %>%
+        #         unite("condition", 1:ncol(.), remove = FALSE)
+        #     print("new_names")
+        #     print(new_names)
+        #     print(str(new_names))
+        # }
+        # 
+        # overwrite <- names(new_names) %>% # determine the columns to overwrite
+        #     intersect(names(values$df))
+        # print("overwrite")
+        # print(overwrite)
+        # print(names(dplyr::select(values$df, -overwrite)))
+        # print(names(new_names))
+        # 
+        # # a previous version of this  stopped working, i think because of a difference in the default handling behavior of grouped dataframes...?
+        # values$df <- values$df %>%
+        #     ungroup() %>%
+        #     dplyr::select( -overwrite) %>%
+        #     bind_cols(new_names)
+        # 
+        # 
+        # means <- unnest(values$df)  %>%
+        #     group_by(Temperature, condition) %>% # once the layout is uploaded, handle the replicates
+        #     dplyr::summarize(mean = mean(value),
+        #                      sd = sd(value)) %>%
+        #     ungroup()
+        # 
+        # df_interm <- values$df %>%
+        #     unnest()
+        # 
+        # if ("mean" %in% names(df_interm)) {
+        #     print("mean is present")
+        #     values$df <- df_interm %>%
+        #         select( -mean, -sd) %>%
+        #         merge(means, by = c("x" = "Temperature", "y"  = "condition")) %>%
+        #         group_by_at(vars(one_of(names(select_if(., is_character))))) %>%
+        #         nest
+        #     #nest_legacy()
+        # 
+        # } else {
+        #     print("mean is not present")
+        #     values$df <- df_interm %>%
+        #         merge(means, by = c("x" = "Temperature", "y"  = "condition")) %>%
+        #         group_by_at(vars(one_of(names(select_if(., is_character))))) %>%
+        #         nest
+        #     #nest_legacy()
+       # }
+    }, ignoreInit = TRUE, ignoreNULL = TRUE
+    )
+    
+    observeEvent(input$submit_handson_names, { # when table1 is updated
+        # new_names_raw <- hot_to_r(input$r_table) %>%
+        #     as.data.frame()
+       # handson_layout <- hot_to_r(input$r_table) 
+        # %>% # this will not have the standardized wells 
+        #                             as.data.frame() 
+        # print("handson struc")
+        # print(str(handson_layout))
+        # # %>%
+        # #                             add_standardized_wells() 
+        # 
+        # if (! "condition" %in% names(handson_layout)) { 
+        #     print("no condition")
+        #     handson_layout <- handson_layout %>% 
+        #         mutate(condition = .$well_)}
+        # print("end no condition")
+        # print("handson struc post cond")
+        # print(str(handson_layout))
+        # 
+        # 
+        # values$df <- join_layout_nest(values$df_1, handson_layout )
+        # print("joined with values$df")
+        # print(str(values$df))
+        # print("end vlues$df str")
+        # print("selecting characters")
+        # print(str(values$df))
+        # print(names(values$df))
+        # values$df %>% 
+        #     select_if(is.character)
         
-        overwrite <- names(new_names) %>% # determine the columns to overwrite
-            intersect(names(values$df))
-        print("overwrite")
-        print(overwrite)
-        print(names(dplyr::select(values$df, -overwrite)))
-        print(names(new_names))
-        
-        # a previous version of this  stopped working, i think because of a difference in the default handling behavior of grouped dataframes...?
-        values$df <- values$df %>%
-            ungroup() %>%
-            dplyr::select( -overwrite) %>%
-            bind_cols(new_names)
-        
-        
-        means <- unnest(values$df)  %>%
-            group_by(Temperature, condition) %>% # once the layout is uploaded, handle the replicates
-            dplyr::summarize(mean = mean(value),
-                             sd = sd(value)) %>%
-            ungroup()
-        
-        df_interm <- values$df %>%
-            unnest()
-        
-        if ("mean" %in% names(df_interm)) {
-            print("mean is present")
-            values$df <- df_interm %>%
-                select( -mean, -sd) %>%
-                merge(means, by = c("x" = "Temperature", "y"  = "condition")) %>%
-                group_by_at(vars(one_of(names(select_if(., is_character))))) %>%
-                nest
-            #nest_legacy()
-            
-        } else {
-            print("mean is not present")
-            values$df <- df_interm %>%
-                merge(means, by = c("x" = "Temperature", "y"  = "condition")) %>%
-                group_by_at(vars(one_of(names(select_if(., is_character))))) %>%
-                nest
-            #nest_legacy()
-        }
+
     }, ignoreInit = TRUE, ignoreNULL = TRUE
     )
     
     
     
-    plot <- reactive({
-        req(values$df) # only render the plot if there is data
-        
-        df_RFU_plot <- unnest(values$df) %>%
-            plyr::mutate("-" = rep("", nrow(.))) %>%
-            plyr::mutate("- " = rep("", nrow(.)))
-        
-        ####### Tm calculations 
-        
-        observeEvent( values$df, {
-            print("observed!")
-            
-            # starting from values$df gives this calculation a fresh slate should the user re-format their data multiple times
-            values$df_tms <- values$df %>% #df_int %>% # add the first derivative Tms
-                plyr::mutate(sgd1 = purrr::map(data, sgfilt_nest, m_ = 1)) %>% # add the first derivative data
-                plyr::mutate(dRFU_tma = as_vector(purrr::map2(data, sgd1, Tm_by_dRFU)))
-            
-            if ("condition" %in% names(values$df_tms)) {
-                # make the averaged table
-                values$tm_table_dRFU <- values$df_tms %>%
-                    select(condition, dRFU_tma)  %>%
-                    group_by(condition)  %>%
-                    summarise( mean_tm = mean(dRFU_tma) ,
-                               sd_tm = sd(dRFU_tma)) %>%
-                    mutate_if(is.numeric, round, 2)
-            } else {
-                values$tm_table_dRFU <- values$df_tms %>%
-                    select(well, dRFU_tma)  %>%
-                    group_by(well)  %>%
-                    summarise( mean_tm = mean(dRFU_tma) ,
-                               sd_tm = sd(dRFU_tma)) %>%
-                    mutate_if(is.numeric, round, 2)  
-            }
-        })
-        
-        facet_func(df = df_RFU_plot, # reacts to the appearance and changes to the dataframe, to the uploading of format files
-                   mean_or_each = input$mean_or_each,
-                   color_by = !!input$color_by,
-                   linetype_by = !!input$linetype_by,
-                   use_linetypes = input$use_linetypes,
-                   facet = input$facet,
-                   facet_by = !!input$wrap_by,
-                   facet_rows = !!input$grid_rows,
-                   facet_cols = !!input$grid_cols,
-                   set_title = plot_title_d(),
-                   legend_title = plot_legend_d(),
-                   legend_linetype_title = plot_legend_linetype(),
-                   fix_free = input$fix_free,
-                   text_size = input$text_size,
-                   legend_position = legend_position(),
-                   x_title = input$x_title,
-                   y_title = input$y_title)
-    })
-    
-    # make an initial plot
-    observeEvent( values$data_raw, { # when new data is uploaded
-        output$data <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
-            req(values$df)
-            # 
-            # df_RFU_plot <- unnest(values$df) %>%
-            #     plyr::mutate("-" = rep("", nrow(.))) %>%
-            #     plyr::mutate("- " = rep("", nrow(.)))
-            
-            facet_func(df = unnest(values$df), # reacts to the appearance and changes to the dataframe, to the uploading of format files
-                       mean_or_each = input$mean_or_each,
-                       color_by = !!input$color_by,
-                       linetype_by = !!input$linetype_by,
-                       use_linetypes = input$use_linetypes,
-                       facet = input$facet,
-                       facet_by = !!input$wrap_by,
-                       facet_rows = !!input$grid_rows,
-                       facet_cols = !!input$grid_cols,
-                       set_title = plot_title_d(),
-                       legend_title = plot_legend_d(),
-                       legend_linetype_title = plot_legend_linetype(),
-                       fix_free = input$fix_free,
-                       text_size = input$text_size,
-                       legend_position = legend_position(),
-                       x_title = input$x_title,
-                       y_title = input$y_title)
-            
-        }, height = function() {
-            if (input$facet == "none") {
-                height <<- 400#session$clientData$output_plot1_width * (1/1.618)
-            } else {
-                # adapted from https://github.com/rstudio/shiny/issues/650
-                h_dyn <<- gg_facet_nrow_ng(plot()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot())))*(1/1.618)
-                if (h_dyn < session$clientData$output_data_width * (1/1.618) ) { height <- session$clientData$output_data_width * (1/1.618)
-                } else { height <<- h_dyn}
-            }
-            height
-        }) 
-    })
-    
-    observeEvent( input$update_plot, {  # when the update plot button is pressed'
-        
-        df_RFU_plot <- unnest(values$df) %>%
-            plyr::mutate("-" = rep("", nrow(.))) %>%
-            plyr::mutate("- " = rep("", nrow(.)))
-        
-        ####### Tm calculations 
-        
-        observeEvent( values$df, {
-            print("observed!")
-            
-            # starting from values$df gives this calculation a fresh slate should the user re-format their data multiple times
-            values$df_tms <- values$df %>% #df_int %>% # add the first derivative Tms
-                plyr::mutate(sgd1 = purrr::map(data, sgfilt_nest, m_ = 1)) %>% # add the first derivative data
-                plyr::mutate(dRFU_tma = as_vector(purrr::map2(data, sgd1, Tm_by_dRFU)))
-            
-            if ("condition" %in% names(values$df_tms)) {
-                # make the averaged table
-                values$tm_table_dRFU <- values$df_tms %>%
-                    select(condition, dRFU_tma)  %>%
-                    group_by(condition)  %>%
-                    summarise( mean_tm = mean(dRFU_tma) ,
-                               sd_tm = sd(dRFU_tma)) %>%
-                    mutate_if(is.numeric, round, 2)
-            } else {
-                values$tm_table_dRFU <- values$df_tms %>%
-                    select(well, dRFU_tma)  %>%
-                    group_by(well)  %>%
-                    summarise( mean_tm = mean(dRFU_tma) ,
-                               sd_tm = sd(dRFU_tma)) %>%
-                    mutate_if(is.numeric, round, 2)  
-            }
-        })
-        
-        plot <- facet_func(df = df_RFU_plot, # reacts to the appearance and changes to the dataframe, to the uploading of format files
-                           mean_or_each = input$mean_or_each,
-                           color_by = !!input$color_by,
-                           linetype_by = !!input$linetype_by,
-                           use_linetypes = input$use_linetypes,
-                           facet = input$facet,
-                           facet_by = !!input$wrap_by,
-                           facet_rows = !!input$grid_rows,
-                           facet_cols = !!input$grid_cols,
-                           set_title = plot_title_d(),
-                           legend_title = plot_legend_d(),
-                           legend_linetype_title = plot_legend_linetype(),
-                           fix_free = input$fix_free,
-                           text_size = input$text_size,
-                           legend_position = legend_position(),
-                           x_title = input$x_title,
-                           y_title = input$y_title)
-        
-        ##
-        output$data <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
-            plot #%>% withSpinner(color="#525252")
-        }, height = function() {
-            if (input$facet == "none") {
-                height <<- 400#session$clientData$output_plot1_width * (1/1.618)
-            } else {
-                # adapted from https://github.com/rstudio/shiny/issues/650
-                h_dyn <<- gg_facet_nrow_ng(plot()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot())))*(1/1.618)
-                if (h_dyn < session$clientData$output_data_width * (1/1.618) ) { height <- session$clientData$output_data_width * (1/1.618)
-                } else { height <<- h_dyn}
-                
-            }
-            height
-        })
-        
-    })
-    
-    
-    callModule(plotDownload, "plot1", data)
-    
-    output$trim_ends <-renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
-        req(values$df)
-        sliderInput("trim_ends", "", min = min(unnest(values$df)$Temperature), max = max(unnest(values$df)$Temperature), 
-                    value = c(min(unnest(values$df)$Temperature),max(unnest(values$df)$Temperature)), 
-                    #value = c(min(values$df$Temperature)), 
-                    step = 1)
-    }) # trim the ends off of the data to improve fitting
-    
-    
-    
-    
-    ####### Tm calculations
-    observeEvent( values$df, {
-        print("observed!")
-        
-        # starting from values$df gives this calculation a fresh slate should the user re-format their data multiple times
-        values$df_tms <- values$df %>% #df_int %>% # add the first derivative Tms
-            plyr::mutate(sgd1 = purrr::map(data, sgfilt_nest, m_ = 1)) %>% # add the first derivative data
-            plyr::mutate(dRFU_tma = as_vector(purrr::map2(data, sgd1, Tm_by_dRFU)))
-        
-        if ("condition" %in% names(values$df_tms)) {
-            # make the averaged table
-            values$tm_table_dRFU <- values$df_tms %>%
-                select(condition, dRFU_tma)  %>%
-                group_by(condition)  %>%
-                summarise( mean_tm = mean(dRFU_tma) ,
-                           sd_tm = sd(dRFU_tma)) %>%
-                mutate_if(is.numeric, round, 2)
-        } else {
-            values$tm_table_dRFU <- values$df_tms %>%
-                select(well, dRFU_tma)  %>%
-                group_by(well)  %>%
-                summarise( mean_tm = mean(dRFU_tma) ,
-                           sd_tm = sd(dRFU_tma)) %>%
-                mutate_if(is.numeric, round, 2)
-        }
-        
-        
-    })
-    
-    
-    
-    output$tm_table_render <- DT::renderDataTable({
-        req(values$df_tms)
-        
-        if( "dRFU_tma" %in% names(values$df_tms)) { # if there are tms to report, render a table
-            df <- values$tm_table_dRFU  %>%
-                set_names( c("Condition", "Tm'", "Stdev"))
-            
-        } else {df <- NULL }
-        
-        df # display this dataframe
-    },
-    options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr')) #scroller = TRUE, dom = 'tr'
-    
-    
-    output$tm_table_render_models <- DT::renderDataTable({ ### new for models
-        req(values$df_tm_models_table)
-        values$df_tm_models_table
-    },
-    options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
-    
-    
-    observeEvent(input$update_model_plots, { # when the user goes to update the modeling plots
-        plot_which_model <- reactive({ input$choose_model_tm })
-        show_fits <- reactive({input$show_fit   })
-        show_components <- reactive({input$show_fit_comps  })
-        show_model_tm <- reactive({input$show_Tm_mods  })
-        
-        color_model_tm <-reactive({input$show_Tm_mods_colors  })
-        color_fits <- reactive({input$show_fit_comps_colors  })
-        
-        # checkboxInput("show_Tm_dRFU", "Show Tm' on plot", FALSE),
-        # checkboxInput("show_Tm_dRFU_colors", "Apply colors  to Tm'", FALSE),
-        # 
-        # 
-        # uiOutput("choose_model_tm"),
-        # checkboxInput("show_Tm_mods", "Show Tm' on plots", FALSE),
-        # checkboxInput("show_fit", "Show fits", FALSE),
-        # checkboxInput("show_fit_comps", "Show fit components", FALSE),
-        # checkboxInput("show_fit_comps_colors", "Apply colors  to fit lines", FALSE),
-        # checkboxInput("show_Tm_mods_colors", "Apply colors  to Tm'", FALSE),
-    })
-    
-    #sigmoid fitting
-    #############
-    ##### for all models, draw from these starting parameters
-    
-    # the first things that happen, as soon as the data is uploaded. We may want to wait to trigger this until the sigmoid fitting section is opened, in case doing it this way interferes with the initial plotting, even if no fits are desired
-    
-    # the following happen automatically, and without user request
-    # observeEvent(values$data_raw, {
-    #     # creation of data-sepcific functions and values
-    #     low_T <- isolate( values$data_raw$Temperature %>% min() )
-    #     high_T <- isolate( values$data_raw$Temperature %>% max() )
-    #     n_meas <- isolate( values$data_raw$Temperature %>% unique() %>% length())
+    # plot <- reactive({
+    #     req(values$df) # only render the plot if there is data
     #     
-    #     #n2r <<- make_temp_n2r(range(low_T:high_T)) #make_temp_n2r(range(values$data$Temperature)) # an example of how this could be used
-    #     #win3d <<- 7#floor(3/((n2r(1) - n2r(0))/n_meas))
-    #     #win3d <<- floor(3/((n2r(1) - n2r(0))/n_meas))
-    #     win3d <<- 7#floor(3/((n2r(1) - n2r(0))/n_meas))
-    #     sgfilt_nest <<- sgfilt_set_n(n_ = find_sgolay_width( win3d ))
-    #     print("finished with initial uploads")
+    #     df_RFU_plot <- unnest(values$df) %>%
+    #         plyr::mutate("-" = rep("", nrow(.))) %>%
+    #         plyr::mutate("- " = rep("", nrow(.)))
+    #     
+    #     ####### Tm calculations 
+    #     
+    #     observeEvent( values$df, {
+    #         print("observed!")
+    #         
+    #         # starting from values$df gives this calculation a fresh slate should the user re-format their data multiple times
+    #         values$df_tms <- values$df %>% #df_int %>% # add the first derivative Tms
+    #             plyr::mutate(sgd1 = purrr::map(data, sgfilt_nest, m_ = 1)) %>% # add the first derivative data
+    #             plyr::mutate(dRFU_tma = as_vector(purrr::map2(data, sgd1, Tm_by_dRFU)))
+    #         
+    #         if ("condition" %in% names(values$df_tms)) {
+    #             # make the averaged table
+    #             values$tm_table_dRFU <- values$df_tms %>%
+    #                 select(condition, dRFU_tma)  %>%
+    #                 group_by(condition)  %>%
+    #                 summarise( mean_tm = mean(dRFU_tma) ,
+    #                            sd_tm = sd(dRFU_tma)) %>%
+    #                 mutate_if(is.numeric, round, 2)
+    #         } else {
+    #             values$tm_table_dRFU <- values$df_tms %>%
+    #                 select(well, dRFU_tma)  %>%
+    #                 group_by(well)  %>%
+    #                 summarise( mean_tm = mean(dRFU_tma) ,
+    #                            sd_tm = sd(dRFU_tma)) %>%
+    #                 mutate_if(is.numeric, round, 2)  
+    #         }
+    #     })
+    #     
+    #     facet_func(df = df_RFU_plot, # reacts to the appearance and changes to the dataframe, to the uploading of format files
+    #                mean_or_each = input$mean_or_each,
+    #                color_by = !!input$color_by,
+    #                linetype_by = !!input$linetype_by,
+    #                use_linetypes = input$use_linetypes,
+    #                facet = input$facet,
+    #                facet_by = !!input$wrap_by,
+    #                facet_rows = !!input$grid_rows,
+    #                facet_cols = !!input$grid_cols,
+    #                set_title = plot_title_d(),
+    #                legend_title = plot_legend_d(),
+    #                legend_linetype_title = plot_legend_linetype(),
+    #                fix_free = input$fix_free,
+    #                text_size = input$text_size,
+    #                legend_position = legend_position(),
+    #                x_title = input$x_title,
+    #                y_title = input$y_title)
+    # })
+    # 
+    # # make an initial plot
+    # observeEvent( values$data_raw, { # when new data is uploaded
+    #     output$data <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
+    #         req(values$df)
+    #         # 
+    #         # df_RFU_plot <- unnest(values$df) %>%
+    #         #     plyr::mutate("-" = rep("", nrow(.))) %>%
+    #         #     plyr::mutate("- " = rep("", nrow(.)))
+    #         
+    #         facet_func(df = unnest(values$df), # reacts to the appearance and changes to the dataframe, to the uploading of format files
+    #                    mean_or_each = input$mean_or_each,
+    #                    color_by = !!input$color_by,
+    #                    linetype_by = !!input$linetype_by,
+    #                    use_linetypes = input$use_linetypes,
+    #                    facet = input$facet,
+    #                    facet_by = !!input$wrap_by,
+    #                    facet_rows = !!input$grid_rows,
+    #                    facet_cols = !!input$grid_cols,
+    #                    set_title = plot_title_d(),
+    #                    legend_title = plot_legend_d(),
+    #                    legend_linetype_title = plot_legend_linetype(),
+    #                    fix_free = input$fix_free,
+    #                    text_size = input$text_size,
+    #                    legend_position = legend_position(),
+    #                    x_title = input$x_title,
+    #                    y_title = input$y_title)
+    #         
+    #     }, height = function() {
+    #         if (input$facet == "none") {
+    #             height <<- 400#session$clientData$output_plot1_width * (1/1.618)
+    #         } else {
+    #             # adapted from https://github.com/rstudio/shiny/issues/650
+    #             h_dyn <<- gg_facet_nrow_ng(plot()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot())))*(1/1.618)
+    #             if (h_dyn < session$clientData$output_data_width * (1/1.618) ) { height <- session$clientData$output_data_width * (1/1.618)
+    #             } else { height <<- h_dyn}
+    #         }
+    #         height
+    #     }) 
+    # })
+    # 
+    # observeEvent( input$update_plot, {  # when the update plot button is pressed'
+    #     
+    #     df_RFU_plot <- unnest(values$df) %>%
+    #         plyr::mutate("-" = rep("", nrow(.))) %>%
+    #         plyr::mutate("- " = rep("", nrow(.)))
+    #     
+    #     ####### Tm calculations 
+    #     
+    #     observeEvent( values$df, {
+    #         print("observed!")
+    #         
+    #         # starting from values$df gives this calculation a fresh slate should the user re-format their data multiple times
+    #         values$df_tms <- values$df %>% #df_int %>% # add the first derivative Tms
+    #             plyr::mutate(sgd1 = purrr::map(data, sgfilt_nest, m_ = 1)) %>% # add the first derivative data
+    #             plyr::mutate(dRFU_tma = as_vector(purrr::map2(data, sgd1, Tm_by_dRFU)))
+    #         
+    #         if ("condition" %in% names(values$df_tms)) {
+    #             # make the averaged table
+    #             values$tm_table_dRFU <- values$df_tms %>%
+    #                 select(condition, dRFU_tma)  %>%
+    #                 group_by(condition)  %>%
+    #                 summarise( mean_tm = mean(dRFU_tma) ,
+    #                            sd_tm = sd(dRFU_tma)) %>%
+    #                 mutate_if(is.numeric, round, 2)
+    #         } else {
+    #             values$tm_table_dRFU <- values$df_tms %>%
+    #                 select(well, dRFU_tma)  %>%
+    #                 group_by(well)  %>%
+    #                 summarise( mean_tm = mean(dRFU_tma) ,
+    #                            sd_tm = sd(dRFU_tma)) %>%
+    #                 mutate_if(is.numeric, round, 2)  
+    #         }
+    #     })
+    #     
+    #     plot <- facet_func(df = df_RFU_plot, # reacts to the appearance and changes to the dataframe, to the uploading of format files
+    #                        mean_or_each = input$mean_or_each,
+    #                        color_by = !!input$color_by,
+    #                        linetype_by = !!input$linetype_by,
+    #                        use_linetypes = input$use_linetypes,
+    #                        facet = input$facet,
+    #                        facet_by = !!input$wrap_by,
+    #                        facet_rows = !!input$grid_rows,
+    #                        facet_cols = !!input$grid_cols,
+    #                        set_title = plot_title_d(),
+    #                        legend_title = plot_legend_d(),
+    #                        legend_linetype_title = plot_legend_linetype(),
+    #                        fix_free = input$fix_free,
+    #                        text_size = input$text_size,
+    #                        legend_position = legend_position(),
+    #                        x_title = input$x_title,
+    #                        y_title = input$y_title)
+    #     
+    #     ##
+    #     output$data <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
+    #         plot #%>% withSpinner(color="#525252")
+    #     }, height = function() {
+    #         if (input$facet == "none") {
+    #             height <<- 400#session$clientData$output_plot1_width * (1/1.618)
+    #         } else {
+    #             # adapted from https://github.com/rstudio/shiny/issues/650
+    #             h_dyn <<- gg_facet_nrow_ng(plot()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot())))*(1/1.618)
+    #             if (h_dyn < session$clientData$output_data_width * (1/1.618) ) { height <- session$clientData$output_data_width * (1/1.618)
+    #             } else { height <<- h_dyn}
+    #             
+    #         }
+    #         height
+    #     })
     #     
     # })
-    
-    observeEvent(values$df, {
-        # print("entering the modeling ring")
-        # win3d <<- 7#floor(3/((n2r(1) - n2r(0))/n_meas))
-        
-        peak_finder_nest <<- make_peak_finder_nest(win3d) ###### brute forced, notice!!!
-        
-        values$start_pars <- get_start_pars(values$df)
-        
-        
-        # first, fit the s1 model
-        # this will over-write the summary dataframes, re-setting the models to follow
-        values$s1_list <- model_all(s1_model, "s1_pred", values$start_pars)
-        #print(values$s1_list)
-        values$df_models <- values$s1_list$df_models
-        values$df_BIC_models <- values$s1_list$df_BIC
-        values$df_tm_models <- values$s1_list$tm_table_models
-        # head(values$df_tm_models)
-        # 
-        values$df_tm_models_table <- values$df_tm_models %>%
-            dplyr::filter( which_model == "s1_pred"  ) %>%
-            plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
-            set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
-            discard(~all(is.na(.x)))
-        
-        # if new data is uploaded, reset all of the buttons as well. perhaps we should set these to watch values$data (unnamed), so it doesn't get over-written by renaming, but i'd need to think more carefully about how to incorporate the names downstream....
-        updateButton(session, "s1",  value = TRUE)
-        updateButton(session, "s1_d",  value = FALSE)
-        updateButton(session, "s2",  value = FALSE)
-        updateButton(session, "s2_d",  value = FALSE)
-        
-    })
-    
-    observeEvent( { input$s1
-        input$s1_d
-        input$s2
-        input$s2_d }, {
-            
-            req(values$df_models)
-            
-            #### fit any newly requested models
-            if (input$s1_d == TRUE) { # if the button for a model is clicked
-                if ("s1_d_pred" %in% values$df_models$which_model == FALSE) { # if it hasn't already been fit, then fit it and append the values to the summary tibbles
-                    values$s1_d_list <- model_all(s1_d_model, "s1_d_pred", values$start_pars)
-                    values$df_models <- values$df_models %>% bind_rows(values$s1_d_list$df_models)
-                    values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s1_d_list$df_BIC)
-                    values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s1_d_list$tm_table_models)
-                }}
-            
-            if (input$s2 == TRUE) {
-                if ("s2_pred" %in% values$df_models$which_model == FALSE) {
-                    values$s2_list <- model_all(s2_model, "s2_pred", values$start_pars)
-                    values$df_models <- values$df_models %>% bind_rows(values$s2_list$df_models)
-                    values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_list$df_BIC)
-                    values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_list$tm_table_models)
-                    
-                }}
-            
-            if (input$s2_d == TRUE) {
-                if ("s2_d_pred" %in% values$df_models$which_model == FALSE) {
-                    values$s2_d_list <- model_all(s2_d_model, "s2_d_pred", values$start_pars)
-                    values$df_models <- values$df_models %>% bind_rows(values$s2_d_list$df_models)
-                    values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_d_list$df_BIC)
-                    values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_d_list$tm_table_models)
-                }}
-            
-            ### update the tm table for display df_tm_models_table <- df_tm_models %>%
-            model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")# doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
-            model_name_true <- reactive(model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)])
-            # print(model_name_true )
-            
-            values$df_tm_models_table <- values$df_tm_models %>%
-                dplyr::filter( which_model %in% model_name_true()  ) %>%
-                plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
-                set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
-                discard(~all(is.na(.x)))
-            
-            # update which models are available for plotting
-            mods_available <- named_mods[c(input$s1, input$s1_d, input$s2, input$s2_d)] # the original named_mods is created outside the server
-            updateRadioButtons(session, "choose_model_tm",
-                               choices = mods_available,
-                               selected = mods_available[1]
-            )
-            
-        })
+    # 
+    # 
+    # callModule(plotDownload, "plot1", data)
+    # 
+    # output$trim_ends <-renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
+    #     req(values$df)
+    #     sliderInput("trim_ends", "", min = min(unnest(values$df)$Temperature), max = max(unnest(values$df)$Temperature), 
+    #                 value = c(min(unnest(values$df)$Temperature),max(unnest(values$df)$Temperature)), 
+    #                 #value = c(min(values$df$Temperature)), 
+    #                 step = 1)
+    # }) # trim the ends off of the data to improve fitting
+    # 
+    # 
+    # 
+    # 
+    # ####### Tm calculations
+    # observeEvent( values$df, {
+    #     print("observed!")
+    #     
+    #     # starting from values$df gives this calculation a fresh slate should the user re-format their data multiple times
+    #     values$df_tms <- values$df %>% #df_int %>% # add the first derivative Tms
+    #         plyr::mutate(sgd1 = purrr::map(data, sgfilt_nest, m_ = 1)) %>% # add the first derivative data
+    #         plyr::mutate(dRFU_tma = as_vector(purrr::map2(data, sgd1, Tm_by_dRFU)))
+    #     
+    #     if ("condition" %in% names(values$df_tms)) {
+    #         # make the averaged table
+    #         values$tm_table_dRFU <- values$df_tms %>%
+    #             select(condition, dRFU_tma)  %>%
+    #             group_by(condition)  %>%
+    #             summarise( mean_tm = mean(dRFU_tma) ,
+    #                        sd_tm = sd(dRFU_tma)) %>%
+    #             mutate_if(is.numeric, round, 2)
+    #     } else {
+    #         values$tm_table_dRFU <- values$df_tms %>%
+    #             select(well, dRFU_tma)  %>%
+    #             group_by(well)  %>%
+    #             summarise( mean_tm = mean(dRFU_tma) ,
+    #                        sd_tm = sd(dRFU_tma)) %>%
+    #             mutate_if(is.numeric, round, 2)
+    #     }
+    #     
+    #     
+    # })
+    # 
+    # 
+    # 
+    # output$tm_table_render <- DT::renderDataTable({
+    #     req(values$df_tms)
+    #     
+    #     if( "dRFU_tma" %in% names(values$df_tms)) { # if there are tms to report, render a table
+    #         df <- values$tm_table_dRFU  %>%
+    #             set_names( c("Condition", "Tm'", "Stdev"))
+    #         
+    #     } else {df <- NULL }
+    #     
+    #     df # display this dataframe
+    # },
+    # options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr')) #scroller = TRUE, dom = 'tr'
+    # 
+    # 
+    # output$tm_table_render_models <- DT::renderDataTable({ ### new for models
+    #     req(values$df_tm_models_table)
+    #     values$df_tm_models_table
+    # },
+    # options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
+    # 
+    # 
+    # observeEvent(input$update_model_plots, { # when the user goes to update the modeling plots
+    #     plot_which_model <- reactive({ input$choose_model_tm })
+    #     show_fits <- reactive({input$show_fit   })
+    #     show_components <- reactive({input$show_fit_comps  })
+    #     show_model_tm <- reactive({input$show_Tm_mods  })
+    #     
+    #     color_model_tm <-reactive({input$show_Tm_mods_colors  })
+    #     color_fits <- reactive({input$show_fit_comps_colors  })
+    #     
+    #     # checkboxInput("show_Tm_dRFU", "Show Tm' on plot", FALSE),
+    #     # checkboxInput("show_Tm_dRFU_colors", "Apply colors  to Tm'", FALSE),
+    #     # 
+    #     # 
+    #     # uiOutput("choose_model_tm"),
+    #     # checkboxInput("show_Tm_mods", "Show Tm' on plots", FALSE),
+    #     # checkboxInput("show_fit", "Show fits", FALSE),
+    #     # checkboxInput("show_fit_comps", "Show fit components", FALSE),
+    #     # checkboxInput("show_fit_comps_colors", "Apply colors  to fit lines", FALSE),
+    #     # checkboxInput("show_Tm_mods_colors", "Apply colors  to Tm'", FALSE),
+    # })
+    # 
+    # #sigmoid fitting
+    # #############
+    # ##### for all models, draw from these starting parameters
+    # 
+    # # the first things that happen, as soon as the data is uploaded. We may want to wait to trigger this until the sigmoid fitting section is opened, in case doing it this way interferes with the initial plotting, even if no fits are desired
+    # 
+    # # the following happen automatically, and without user request
+    # # observeEvent(values$data_raw, {
+    # #     # creation of data-sepcific functions and values
+    # #     low_T <- isolate( values$data_raw$Temperature %>% min() )
+    # #     high_T <- isolate( values$data_raw$Temperature %>% max() )
+    # #     n_meas <- isolate( values$data_raw$Temperature %>% unique() %>% length())
+    # #     
+    # #     #n2r <<- make_temp_n2r(range(low_T:high_T)) #make_temp_n2r(range(values$data$Temperature)) # an example of how this could be used
+    # #     #win3d <<- 7#floor(3/((n2r(1) - n2r(0))/n_meas))
+    # #     #win3d <<- floor(3/((n2r(1) - n2r(0))/n_meas))
+    # #     win3d <<- 7#floor(3/((n2r(1) - n2r(0))/n_meas))
+    # #     sgfilt_nest <<- sgfilt_set_n(n_ = find_sgolay_width( win3d ))
+    # #     print("finished with initial uploads")
+    # #     
+    # # })
+    # 
+    # observeEvent(values$df, {
+    #     # print("entering the modeling ring")
+    #     # win3d <<- 7#floor(3/((n2r(1) - n2r(0))/n_meas))
+    #     
+    #     peak_finder_nest <<- make_peak_finder_nest(win3d) ###### brute forced, notice!!!
+    #     
+    #     values$start_pars <- get_start_pars(values$df)
+    #     
+    #     
+    #     # first, fit the s1 model
+    #     # this will over-write the summary dataframes, re-setting the models to follow
+    #     values$s1_list <- model_all(s1_model, "s1_pred", values$start_pars)
+    #     #print(values$s1_list)
+    #     values$df_models <- values$s1_list$df_models
+    #     values$df_BIC_models <- values$s1_list$df_BIC
+    #     values$df_tm_models <- values$s1_list$tm_table_models
+    #     # head(values$df_tm_models)
+    #     # 
+    #     values$df_tm_models_table <- values$df_tm_models %>%
+    #         dplyr::filter( which_model == "s1_pred"  ) %>%
+    #         plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
+    #         set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
+    #         discard(~all(is.na(.x)))
+    #     
+    #     # if new data is uploaded, reset all of the buttons as well. perhaps we should set these to watch values$data (unnamed), so it doesn't get over-written by renaming, but i'd need to think more carefully about how to incorporate the names downstream....
+    #     updateButton(session, "s1",  value = TRUE)
+    #     updateButton(session, "s1_d",  value = FALSE)
+    #     updateButton(session, "s2",  value = FALSE)
+    #     updateButton(session, "s2_d",  value = FALSE)
+    #     
+    # })
+    # 
+    # observeEvent( { input$s1
+    #     input$s1_d
+    #     input$s2
+    #     input$s2_d }, {
+    #         
+    #         req(values$df_models)
+    #         
+    #         #### fit any newly requested models
+    #         if (input$s1_d == TRUE) { # if the button for a model is clicked
+    #             if ("s1_d_pred" %in% values$df_models$which_model == FALSE) { # if it hasn't already been fit, then fit it and append the values to the summary tibbles
+    #                 values$s1_d_list <- model_all(s1_d_model, "s1_d_pred", values$start_pars)
+    #                 values$df_models <- values$df_models %>% bind_rows(values$s1_d_list$df_models)
+    #                 values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s1_d_list$df_BIC)
+    #                 values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s1_d_list$tm_table_models)
+    #             }}
+    #         
+    #         if (input$s2 == TRUE) {
+    #             if ("s2_pred" %in% values$df_models$which_model == FALSE) {
+    #                 values$s2_list <- model_all(s2_model, "s2_pred", values$start_pars)
+    #                 values$df_models <- values$df_models %>% bind_rows(values$s2_list$df_models)
+    #                 values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_list$df_BIC)
+    #                 values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_list$tm_table_models)
+    #                 
+    #             }}
+    #         
+    #         if (input$s2_d == TRUE) {
+    #             if ("s2_d_pred" %in% values$df_models$which_model == FALSE) {
+    #                 values$s2_d_list <- model_all(s2_d_model, "s2_d_pred", values$start_pars)
+    #                 values$df_models <- values$df_models %>% bind_rows(values$s2_d_list$df_models)
+    #                 values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_d_list$df_BIC)
+    #                 values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_d_list$tm_table_models)
+    #             }}
+    #         
+    #         ### update the tm table for display df_tm_models_table <- df_tm_models %>%
+    #         model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")# doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
+    #         model_name_true <- reactive(model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)])
+    #         # print(model_name_true )
+    #         
+    #         values$df_tm_models_table <- values$df_tm_models %>%
+    #             dplyr::filter( which_model %in% model_name_true()  ) %>%
+    #             plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
+    #             set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
+    #             discard(~all(is.na(.x)))
+    #         
+    #         # update which models are available for plotting
+    #         mods_available <- named_mods[c(input$s1, input$s1_d, input$s2, input$s2_d)] # the original named_mods is created outside the server
+    #         updateRadioButtons(session, "choose_model_tm",
+    #                            choices = mods_available,
+    #                            selected = mods_available[1]
+    #         )
+    #         
+    #     })
     
 } # end server
 # Run the application 

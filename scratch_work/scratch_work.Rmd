@@ -30,6 +30,114 @@ by_well_layout
 ```
 
 ```{r}
+
+#all(c("well_", "well_f_", "row_", "col_") %in% names(by_well))
+ensure_standardized_wells <- function( df ) {
+  if ( all(c("well_", "well_f_", "row_", "col_") %in% names(df)) == FALSE ) { # if standardized well columns are missing
+    df_out <- df %>%
+              add_standardized_wells()
+  } else {
+    df_out <- df
+  }
+  
+  df_out 
+}
+
+by_well %>% ensure_standardized_wells()
+rtable %>% ensure_standardized_wells()
+```
+
+```{r}
+# the part that's failing
+new_names <- readRDS("new_names_raw_handson.rds")
+values_df_1 <- readRDS("values_df_1.rds")
+new_names
+values_df_1
+
+join_layout_nest <- function(by_well, layout) { 
+  by_well_ <- ensure_standardized_wells(by_well)
+  layout_ <- ensure_standardized_wells(layout)
+  dup_cols <- names(layout_)[!c(names(layout_) %in% c("well_", "well_f_", "row_", "col_"))]
+  
+  if (!"condition" %in% names(layout_)) {
+    print("no_cond")
+    layout_ <- layout_ %>%
+                unite("condition", -one_of(c("well","well_", "well_f_", "row_", "col_")), remove = FALSE)
+  }
+  
+  by_well_ %>%
+    unnest_legacy() %>%
+    dplyr::select(-one_of(dup_cols )) %>% # if it's already in layout, drop it
+    dplyr::left_join(., layout_, by = c("well_", "well_f_", "row_", "col_")) %>%
+    group_by(condition, Temperature) %>%
+    dplyr::mutate(mean = mean(value),
+                  sd = sd(value),
+                  mean_norm = mean(value_norm),
+                  sd_norm = sd(value_norm)) %>%
+    ungroup() %>%
+    nest(data = c(Temperature, value, mean, sd, Temperature_norm, value_norm, mean_norm, sd_norm)) # THIS IS NOT nest_legacy
+}
+
+join_layout_nest(values_df_1, new_names %>% dplyr::select(-condition))
+new_names
+```
+```{r}
+names(new_names)[!c(names(new_names) %in% c("well_", "well_f_", "row_", "col_"))]
+names(new_names)
+c(names(new_names) %in% c("well_", "well_f_", "row_", "col_"))
+```
+
+
+```{r}
+    # output$r_table <- renderRHandsontable({ 
+    #     req(values$df)
+    #     rhandsontable( values$df %>% select_if(is.character), height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)
+    # })
+ensure_standardized_wells <- function( df ) {
+  if ( all(c("well_", "well_f_", "row_", "col_") %in% names(df)) == FALSE ) { # if standardized well columns are missing
+    df_out <- df %>%
+              add_standardized_wells()
+  } else {
+    df_out <- df
+  }
+  
+  df_out 
+}
+  
+join_layout_nest <- function(by_well, layout) { 
+  by_well_ <- ensure_standardized_wells(by_well)
+  layout_ <- ensure_standardized_wells(layout)
+  
+  by_well_ %>%
+    unnest_legacy() %>%
+    dplyr::left_join(., layout_, by = c("well_", "well_f_", "row_", "col_")) %>%
+    rename( well.original = well.x,
+            well.layout = well.y ) %>%
+    group_by(condition, Temperature) %>%
+    dplyr::mutate(mean = mean(value),
+                  sd = sd(value),
+                  mean_norm = mean(value_norm),
+                  sd_norm = sd(value_norm)) %>%
+    ungroup() %>%
+    nest(data = c(Temperature, value, mean, sd, Temperature_norm, value_norm, mean_norm, sd_norm)) # THIS IS NOT nest_legacy
+}
+
+handson_layout <- by_well %>%
+          select_if(is.character) 
+
+      if (! "condition" %in% names(handson_layout)) { 
+            print("no condition")
+            handson_layout <- handson_layout %>% 
+                mutate(condition = .$well_)}
+        print("end no condition")
+        
+
+# what if you overlay the same thing twice?
+by_well_layout <- join_layout_nest(by_well, handson_layout) 
+by_well_layout
+```
+
+```{r}
 # # test the well translation function
 # by_well_a1 <- by_well %>% mutate(well = c("a1", "a2", "a3"))
 # by_well_A01 <- by_well %>% mutate(well = c("A01", "A02", "A03"))
