@@ -7,12 +7,15 @@ library(signal) # contains the savistky golay filter (savgolfilt), used to gener
 library(assertive.types) # for dynamic sizing of the facet plots
 library(shinyBS) # drop-down panels
 library(tidyverse) #  handling data structures and plotting
+
 source("support_scripts/dsfworld5_data_analysis.R") # scripts written to analyze and visualize DSF data
 source("support_scripts/20190929_dsfworld_modeling.R") # compute the interactive models; make the interactive modeling plot  
 source("support_scripts/DSF_data_parser_dsfw4_v2.R")
 source("support_scripts/dsfworld5_model_fitting.R")
+source("support_scripts/upload_formatters.R")
 source("support_scripts/layout_handling.R")
 
+library(shinyalert)
 library(shinycssloaders) # spinning plot loading icon
 library(rhandsontable) # user-interactive tables 
 library(shiny) # for shiny web-apps 
@@ -282,23 +285,6 @@ server <- function(session, input, output) {
     })
 
     
-    output$r_table <- renderRHandsontable({
-         req(values$df)
-         if (is.null(input$layout_file) == FALSE) { # if there is a layout file
-
-             layout_vars <- names(layout())[!c(names(layout()) %in% c("well_", "well_f_", "row_", "col_", "row", "column"))]
-             
-             handson_df <- values$df %>%
-                            select( one_of( layout_vars )) # this will always include "condition"
-
-        } else { # if no layout file
-                handson_df <- values$df %>%
-                                select(well, condition) 
-         }
-
-        rhandsontable( handson_df, height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)            
-     })
-    
     output$current_names <- renderTable({values$df %>% select_if(is.character)})
     
     output$handson_update_button <- renderUI({
@@ -420,47 +406,104 @@ server <- function(session, input, output) {
     
 
 ####### this responds to the upoading of a layout file
-    # lo384 <- make_layout("sample_layout.csv") %>%
-    #     add_standardized_wells()
-    # 
-    # data_raw <- read.csv("sample_data_file.csv")
-    # 
-    # by_well <- nest_raw(data_raw) %>%
-    #     add_standardized_wells()
-    # 
-    # by_well_layout <- join_layout_nest(by_well, lo384) 
-    # by_well_layout
-    
     layout <- reactive({
         req(input$layout_file)
         
         make_layout(input$layout_file$datapath) %>% # all columns are characters
             add_standardized_wells()
     })
-    
+
     observeEvent( layout(), { 
         values$df <- join_layout_nest(values$df_1, layout() ) 
     })
-    
+    values$r_table_update <- 1
     observeEvent(input$submit_handson_names, { # when table1 is updated
         print("updating handson names")
-        new_names_raw <- hot_to_r(input$r_table) %>%
+    
+        values$df<- hot_to_r(input$r_table) %>%
                             as_tibble() %>%
-                            ensure_standardized_wells() 
-      
-        # write_rds(new_names_raw, "new_names_raw_handson.rds")
-        # write_rds(values$df_1, "values_df_1.rds")
-        print(names(new_names_raw))
-
-        values$df <- join_layout_nest( values$df_1, new_names_raw )
-                        
+                            ensure_standardized_wells() %>%
+                            join_layout_nest( values$df_1, . )
+         
         print("updated volues df condition column")
         print(values$df$condition)
- 
-    }, ignoreInit = TRUE, ignoreNULL = TRUE
-    )
+        
+       values$r_table_update <- values$r_table_update +1 
+       print("r_table_update")
+       print(values$r_table_update )
+        
+    }, ignoreInit = TRUE, ignoreNULL = TRUE)
     
+    # observeEvent(input$submit_handson_names, values$df, {
+    #     print("insdie the ovserve")
+    #     # if (is.null(input$layout_file) == FALSE) { # if there is a layout file
+    #     #     values$layout_vars <- names(layout())[!c(names(layout()) %in% c("well_", "well_f_", "row_", "col_", "row", "column"))]
+    #     # }
+    #     # #     values$handson_df <- reactive({values$df %>%
+    #     # #         select( one_of( layout_vars() )) })# this will always include "condition"
+    #     # #     
+    #     # # } else { # if no layout file
+    #     # #     values$handson_df <- reactive({values$df %>%
+    #     # #         select(well, condition) })
+    #     # }
+    # })
+    
+    # output$r_table <- renderRHandsontable({
+    #     #r_table_update
+    #     print("update r_table")
+    #     # # create the new r_table
+    #     # if (is.null(input$layout_file) == FALSE) { # if there is a layout file
+    #     #     layout_vars <- names(layout())[!c(names(layout()) %in% c("well_", "well_f_", "row_", "col_", "row", "column"))]
+    #     #     
+    #     #     handson_df <- values$df %>%
+    #     #         select( one_of( layout_vars )) # this will always include "condition"
+    #     #     
+    #     # } else { # if no layout file
+    #     #     handson_df <- values$df %>%
+    #     #         select(well, condition) 
+    #     # }
+    #    # handson_df <- isolate(values$handson_df)
+    #     handson_df <- values$df 
+    #     rhandsontable( handson_df, height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)            
+    # })   
 
+        output$r_table <- renderRHandsontable({
+            trigger <- values$r_table_update
+            req(values$df)
+            if (is.null(input$layout_file) == FALSE) { # if there is a layout file
+
+                layout_vars <- names(layout())[!c(names(layout()) %in% c("well_", "well_f_", "row_", "col_", "row", "column"))]
+
+                handson_df <- values$df %>%
+                    select( one_of( layout_vars )) # this will always include "condition"
+
+            } else { # if no layout file
+                handson_df <- values$df %>%
+                    select(well, condition)
+            }
+
+            rhandsontable( handson_df, height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)
+        })
+    
+    # observeEvent(values$df, { # when values$df changes, or the handsontable update button is selected
+    #     print("updating hansontable output")
+    #     output$r_table <- renderRHandsontable({
+    #         req(values$df)
+    #         if (is.null(input$layout_file) == FALSE) { # if there is a layout file
+    #             
+    #             layout_vars <- names(layout())[!c(names(layout()) %in% c("well_", "well_f_", "row_", "col_", "row", "column"))]
+    #             
+    #             handson_df <- values$df %>%
+    #                 select( one_of( layout_vars )) # this will always include "condition"
+    #             
+    #         } else { # if no layout file
+    #             handson_df <- values$df %>%
+    #                 select(well, condition) 
+    #         }
+    #         
+    #         rhandsontable( handson_df, height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)            
+    #     }) 
+    # }) 
     # plot <- reactive({
     #     req(values$df) # only render the plot if there is data
     #     

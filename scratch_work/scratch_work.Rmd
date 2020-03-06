@@ -82,6 +82,20 @@ join_layout_nest(values_df_1, new_names %>% dplyr::select(-condition))
 new_names
 ```
 ```{r}
+l_names <- c("a", "condition")
+all(l_names[!l_names == "condition"] %in% c("a"))
+    # common_cols <- c("well","well_", "well_f_", "row_", "col_", "row", "column") %>%
+    #                 .[. %in% names(layout_)]
+# all(c("a", "B") %in% c("b"))
+# a <- c("well","well_", "well_f_", "row_", "col_", "row", "column") %>%
+#   .[. %in% c("well","well_", "well_f_", "row_", "col_") ]
+#  a 
+#a[a %in% c(c("well","well_", "well_f_", "row_", "col_") )]
+
+#c("well","well_", "well_f_", "row_", "col_", "row", "column") %in% c("well","well_", "well_f_", "row_", "col_", "row", "column") 
+```
+
+```{r}
 names(new_names)[!c(names(new_names) %in% c("well_", "well_f_", "row_", "col_"))]
 names(new_names)
 c(names(new_names) %in% c("well_", "well_f_", "row_", "col_"))

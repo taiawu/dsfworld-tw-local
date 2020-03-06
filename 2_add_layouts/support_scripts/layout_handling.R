@@ -72,19 +72,33 @@ ensure_standardized_wells <- function( df ) {
 join_layout_nest <- function(by_well, layout) { 
   by_well_ <- ensure_standardized_wells(by_well) # this will always be fresh, un-layout-joined dataframe
   layout_ <- ensure_standardized_wells(layout)
-  dup_cols <- names(layout_)[!c(names(layout_) %in% c("well_", "well_f_", "row_", "col_"))]
+  l_names <- names(layout_)
+  dup_cols <- l_names[!l_names %in% c("well_", "well_f_", "row_", "col_")]
+  #dup_cols <- names(layout_)[!c(names(layout_) %in% c("well_", "well_f_", "row_", "col_"))]
   
+  common_cols <- c("well","well_", "well_f_", "row_", "col_", "row", "column") %>%
+                 .[. %in% names(layout_) ]
+
   if (!"condition" %in% names(layout_)) { # this should never happen....
     print("no_cond see join_layout_nest in layout_handling.R")
     layout_ <- layout_ %>%
-      unite("condition", -one_of(c("well","well_", "well_f_", "row_", "col_", "row", "column")), remove = FALSE)
-  } else {
-    print("refreshing condition column")
-    layout_ <- layout_ %>%
-               select(-condition) %>% # clear the existing condition colujmn
-               unite("condition", -one_of(c("well","well_", "well_f_", "row_", "col_", "row", "column")), remove = FALSE) %>% # create a unique column, used to define groups after averaging
-               mutate_if(is.factor, as.character)
+                unite("condition", -one_of(c("well","well_", "well_f_", "row_", "col_", "row", "column")), remove = FALSE)
+  } else { # if "condition" is present in the layout
+    if (  all(l_names[!l_names == "condition"] %in% common_cols) == TRUE ) { # if "condition" is the only column unique to the layout
+      common_cols <- c("well_", "well_f_", "row_", "col_", "row", "column") # retain the well column
+      print("all names in common cols ZZ")
+    } ### IX THIS--laout needs to have something left to combine
   }
+  
+    layout_ <- layout_ %>%
+               select(-condition) %>%
+               unite("condition", -one_of(common_cols), remove = FALSE) %>%
+               mutate_if(is.factor, as.character)
+    # %>% # clear the existing condition column
+    #            unite("condition", -one_of(common_cols), remove = FALSE) 
+  #   %>% # create a unique column, used to define groups after averaging
+  #              mutate_if(is.factor, as.character)
+   
   
   by_well_ %>%
     unnest_legacy() %>%
