@@ -1,10 +1,11 @@
+# 2_add_layouts/app.R
 library(shinyBS) # drop-down panels
 library(tidyverse) #  handling data structures and plotting
 
 source("support_scripts/upload_formatters.R")
 source("support_scripts/layout_handling.R")
 
-library(shinyalert)
+library(shinyalert) # pop-up error messages
 library(shinycssloaders) # spinning plot loading icon
 library(rhandsontable) # user-interactive tables 
 library(shiny) # for shiny web-apps 

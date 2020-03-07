@@ -1,27 +1,15 @@
-# perhaps we could put the loading of packages into an observe event, to keep them all froam loading right at the start. would this make the first page faster?
-library(quantmod) # contains the findValleys function, which maybe we should just extract and put verbatim in a source file instead of loading this whole thing...?
-library(minpack.lm) # contains the nlsLM function, which we use for our fitting
-library(modelr) # used in both the data modeling and the analysis model fitting 
-library(SciViews) # contains the ln function used in the data modeling
-library(signal) # contains the savistky golay filter (savgolfilt), used to generate the first derivative data in both data modeling and analysis model fitting  
-library(assertive.types) # for dynamic sizing of the facet plots
 library(shinyBS) # drop-down panels
 library(tidyverse) #  handling data structures and plotting
-source("support_scripts/dsfworld5_data_analysis.R") # scripts written to analyze and visualize DSF data
-source("support_scripts/20190929_dsfworld_modeling.R") # compute the interactive models; make the interactive modeling plot  
-source("support_scripts/DSF_data_parser_dsfw4_v2.R")
-source("support_scripts/dsfworld5_model_fitting.R")
 
+source("support_scripts/upload_formatters.R")
+source("support_scripts/layout_handling.R")
+
+library(shinyalert) # pop-up error messages
 library(shinycssloaders) # spinning plot loading icon
 library(rhandsontable) # user-interactive tables 
 library(shiny) # for shiny web-apps 
 
-named_mods <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") %>%
-    set_names("Model 1", "Model 2", "Model 3", "Model 4")
-
-df_sample <- read.csv("sample_data_file.csv")
-
-ui <- navbarPage("",
+ui <- navbarPage(useShinyalert(),
                  #tabPanel(p("to data analysis", style = "font-family: 'Avenir Next'; font-size: 20px; color: grey",align = "right")),
                  # Data Analysis --------------------------------------------------------------------------------
                  tabPanel(p("to data analysis", style = "font-family: 'Avenir Next'; font-size: 20px; color: grey",align = "center"), value = "data_analysis_mother", # end tab panel (tabset, div, main still remaining)
@@ -36,29 +24,7 @@ ui <- navbarPage("",
                                                ),
                                                sidebarLayout(
                                                    sidebarPanel(
-                                                       bsCollapse(id = "plot_aes", open = "Panel 2",
-                                                                  bsCollapsePanel(p("Set plate layout and replicates", style = "font-family: 'Avenir Next'; font-size: 16px; color: black",align = "center"), 
-                                                                                  bsCollapsePanel(p("Method 1 - upload layout", style = "font-family: 'Avenir Next'; font-size: 14px; color: black",align = "center"), 
-                                                                                                  p("Our favorite approach to DSF data analysis.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                  p("Use the template below to create a layout file for your experiment. Each plate in the layout file defines a new experimental variable (e.g. compound, pH, concentration), with the varible name provided in the first column of the layout file. You can define any number of variables by adding additional plates to the layout file. Using this method, data can be visualized by user-defined variables (e.g. color by concentration).", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                  p("Layouts are connected to data by well name, so your data must have a 'well' column to use this feature.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                  p("For more information, see the instructions tab.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                  downloadButton("sample_layout_file", p("Download layout template", style = "font-family: 'Avenir Next'; font-size: 14px; color: black",align = "center")), #
-                                                                                                  p("...", style = "font-family: 'Avenir Next'; font-size: 12px; color: white",align = "center"),
-                                                                                                  fileInput("layout_file", p("Upload your csv layout file", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                            accept = c(
-                                                                                                                "text/csv",
-                                                                                                                "text/comma-separated-values,text/plain",
-                                                                                                                ".csv")
-                                                                                                  )),
-                                                                                  p("...", style = "font-family: 'Avenir Next'; font-size: 15px; color: white",align = "center"),
-                                                                                  p("Method 2 - edit manually", style = "font-family: 'Avenir Next'; font-size: 15px; color: black",align = "center"),
-                                                                                  rHandsontableOutput("r_table"),
-                                                                                  p("...", style = "font-family: 'Avenir Next'; font-size: 15px; color: white",align = "center"),
-                                                                                  uiOutput("handson_update_button"),
-                                                                                  #actionButton("submit_handson_names", p("Update names", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center")),
-                                                                                  style = "default")
-                                                       ),
+  
                                                        bsCollapse(id = "plot_aes", open = "Panel 2",
                                                                   bsCollapsePanel(p("Make plots", style = "font-family: 'Avenir Next'; font-size: 16px; color: black", align = "center"),
                                                                                  # update_plot
@@ -90,108 +56,6 @@ ui <- navbarPage("",
                                                                                                   numericInput("text_size", "Plot text size", 10, min = 4, max = 20),
                                                                                                   checkboxInput("hide_legend", "Hide legend", FALSE)),
                                                                                   style = "default")
-                                                       ),
-                                                       bsCollapse(id = "tm_table", open = "Panel 2",
-                                                                  bsCollapsePanel(p("Find apparent Tms", style = "font-family: 'Avenir Next'; font-size: 16px; color: black",align = "center"),
-                                                                                  bsCollapsePanel(p("By dRFU", style = "font-family: 'Avenir Next'; font-size: 14px; color: black",align = "center"),
-                                                                                                  #splitLayout(cellWidths = c("50%", "50%"),
-                                                                                                  checkboxInput("show_Tm_dRFU", "Show Tm' on plot", FALSE),
-                                                                                                  checkboxInput("show_Tm_dRFU_colors", "Apply colors  to Tm'", FALSE),
-                                                                                                  DT::dataTableOutput("tm_table_render"), #style = "height:400px;"
-                                                                                                  style = "default"
-                                                                                  ),
-                                                                                  
-                                                                                  bsCollapsePanel(p("By sigmoid fitting", style = "font-family: 'Avenir Next'; font-size: 14px; color: black",align = "center"),
-                                                                                                  p("Select the models you would like to fit to your data below.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                  splitLayout(cellWidths = c("25%", "25%", "25%", "25%"), 
-                                                                                                              p("Model 1", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                              p("Model 2", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                              p("Model 3", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                              p("Model 4", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center")
-                                                                                                  ),
-                                                                                                  
-                                                                                                  splitLayout(cellWidths = c("25%", "25%", "25%", "25%"), 
-                                                                                                              bsButton("s1", label = tags$img(src = "s1_v1.png",
-                                                                                                                                              width = "100%"),
-                                                                                                                       block = TRUE, type = "toggle", value = TRUE), 
-                                                                                                              bsButton("s1_d", label = tags$img(src = "s1_id_v1.png",
-                                                                                                                                                width = "100%"),
-                                                                                                                       block = TRUE, type = "toggle", value = FALSE),
-                                                                                                              bsButton("s2", label = tags$img(src = "s2_v1.png",
-                                                                                                                                              width = "100%"),
-                                                                                                                       block = TRUE, type = "toggle", value = FALSE), 
-                                                                                                              bsButton("s2_d", label = tags$img(src = "s2_id_v1.png",
-                                                                                                                                                width = "100%"),
-                                                                                                                       block = TRUE, type = "toggle", value = FALSE)
-                                                                                                  ),
-                                                                                                  
-                                                                                                  bsTooltip("s1", "Model 1: One sigmoid with decay",
-                                                                                                            "right", options = list(container = "body")),
-                                                                                                  bsTooltip("s1_d", "Model 2: One sigmoid with decay and starting-temperature fluorescence",
-                                                                                                            "right", options = list(container = "body")),
-                                                                                                  bsTooltip("s2", "Model 3: Two sigmoids with decays",
-                                                                                                            "right", options = list(container = "body")),
-                                                                                                  bsTooltip("s2_d", "Model 4: Two sigmoids with decays and starting-temperature fluorescence",
-                                                                                                            "right", options = list(container = "body")),
-                                                                                                  p(" ", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
-                                                                                                  # bsCollapsePanel(p("Choose model(s) to fit", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                  #                 p("Fit all models, and select the best ones", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center")
-                                                                                                  # ),
-                                                                                                  DT::dataTableOutput("tm_table_render_models"), #style = "height:400px;"
-                                                                                                  p(" ", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
-                                                                                                  bsCollapsePanel(p("Add Tm' and fits to plots", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                                  # radioButtons("choose_model_tm", "Select a model to plot",
-                                                                                                                  #              #label = c("Model 1"),
-                                                                                                                  #              choices = c("")#("Model 1" = "s1_pred")#named_mods
-                                                                                                                  # ),
-                                                                                                                  uiOutput("choose_model_tm"),
-                                                                                                                  checkboxInput("show_Tm_mods", "Show Tm' on plots", FALSE),
-                                                                                                                  checkboxInput("show_fit", "Show fits", FALSE),
-                                                                                                                  checkboxInput("show_fit_comps", "Show fit components", FALSE),
-                                                                                                                  p("Fits and Tm' are ploted in black by default", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "left") %>% strong(),
-                                                                                                                  checkboxInput("show_Tm_mods_colors", "Apply colors  to Tm'", FALSE),
-                                                                                                                  checkboxInput("show_fit_comps_colors", "Apply colors  to fit lines", FALSE),
-                                                                                                                  uiOutput("update_model_plots")
-                                                                                                                  
-                                                                                                                  #actionButton("update_model_plots", p("Update plot", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(), width = "100%")
-                                                                                                  ),
-                                                                                                  
-                                                                                                  
-                                                                                                  bsCollapsePanel(p("Improve fits", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                                  p("Fit data only in the following temperature range", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),
-                                                                                                                  #p("", style = "font-family: 'Avenir Next'; font-size: 10px; color: black", align = "center"),
-                                                                                                                  uiOutput("trim_ends"),
-                                                                                                                  p("Update initial model  guesses", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),
-                                                                                                                  p("To fit models to data, DSFworld begins by guessing initial values for model parameters, and then improves upon them until the fit is optimized. If fits have failed, or describe the data poorly, manually defining more accurate starting guesses for the Tm' below can help.", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                                  #rHandsontableOutput("start_pars"),
-                                                                                                                  # bsTooltip("trim_ends", p("To perform each fit, DSFworld starts with an initial guess for the model parameters. If fits have failed, or describe the data poorly, manually defining more accurate starting guesses for the Tm' below can help.", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                                  #           "right", options = list(container = "body")),
-                                                                                                                  uiOutput("update_fits_button")
-                                                                                                  ),
-                                                                                                  bsCollapsePanel(p("Select the best model for each condition", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                                  p("Click 'Plot model comparision' below to display the four models side-by-side. Use this plot to select the best model for each condition. ", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                                  uiOutput("show_BIC_plot"),
-                                                                                                                  
-                                                                                                                  p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
-                                                                                                                  p("For each condition, the model with the lowest Bayesian Information Criterion (BIC) is selected by default, to maximize model quality without over-fitting (see 'About the analysis').", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                                  
-                                                                                                                  p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
-                                                                                                                  p("To change model selections", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),
-                                                                                                                  p("Select a model for each condition manually by double-clicking on the desired model in the plot. ", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                                  
-                                                                                                                  p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
-                                                                                                                  
-                                                                                                                  p("Or, to change multiple model selections at a time, edit the table below and press 'Apply model selections from table'. ", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                                  #rHandsontableOutput("selected_models"),
-                                                                                                                  uiOutput("apply_handson_models")
-                                                                                                                  #rHandsontableOutput("start_pars"),
-                                                                                                                  # bsTooltip("trim_ends", p("To perform each fit, DSFworld starts with an initial guess for the model parameters. If fits have failed, or describe the data poorly, manually defining more accurate starting guesses for the Tm' below can help.", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                                  #           "right", options = list(container = "body")),
-                                                                                                                  
-                                                                                                  )
-                                                                                  ),
-                                                                                  #DT::dataTableOutput("tm_table_render"), #style = "height:400px;"
-                                                                                  style = "default"
                                                                   )
                                                        )
                                                        
@@ -220,7 +84,7 @@ ui <- navbarPage("",
                                                            ),
                                                            plotOutput("data", height = "auto") %>% withSpinner(color="#525252"), style = ("overflow-y:scroll; max-height: 600px") 
                                                        ))
-                                               )
+                                               
                                       )
                                        # end tabpanel
                            )) # end tabset Panel (contains all "analysis sub-panels)
@@ -231,7 +95,7 @@ ui <- navbarPage("",
 # Define server logic required to draw a histogram
 server <- function(session, input, output) {
     values <- reactiveValues() 
-    values$data_raw <- df_sample
+    df_sample <- readRDS("values_df_with_layout.rds")
     
     observeEvent(values$data_raw, {
         values$data_raw <- df_sample 

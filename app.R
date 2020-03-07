@@ -1,3 +1,4 @@
+# full app, old version
 # perhaps we could put the loading of packages into an observe event, to keep them all froam loading right at the start. would this make the first page faster?
 library(quantmod) # contains the findValleys function, which maybe we should just extract and put verbatim in a source file instead of loading this whole thing...?
 library(minpack.lm) # contains the nlsLM function, which we use for our fitting

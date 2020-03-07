@@ -81,6 +81,9 @@ join_layout_nest <- function(by_well, layout) {
 join_layout_nest(values_df_1, new_names %>% dplyr::select(-condition))
 new_names
 ```
+
+
+
 ```{r}
 l_names <- c("a", "condition")
 all(l_names[!l_names == "condition"] %in% c("a"))
@@ -165,6 +168,72 @@ by_well_layout
 # test the layouts 
 # lo384E <- make_layout("sample_layout_empties.csv") # lets just keep the "empty" convention, since i don't know how different computers/excel versions deal with empty cells 
 # lo96 <- make_layout("sample_layout_96.csv")
+```
+
+
+
+```{r}
+## for plotting
+join_layout_nest <- function(by_well, layout) { 
+  by_well_ <- ensure_standardized_wells(by_well) # this will always be fresh, un-layout-joined dataframe
+  layout_ <- ensure_standardized_wells(layout)
+  l_names <- names(layout_)
+  dup_cols <- l_names[!l_names %in% c("well_", "well_f_", "row_", "col_")]
+  #dup_cols <- names(layout_)[!c(names(layout_) %in% c("well_", "well_f_", "row_", "col_"))]
+  
+  common_cols <- c("well","well_", "well_f_", "row_", "col_", "row", "column") %>%
+                 .[. %in% names(layout_) ]
+
+  if (!"condition" %in% names(layout_)) { # this should never happen....
+    print("no_cond see join_layout_nest in layout_handling.R")
+    layout_ <- layout_ %>%
+                unite("condition", -one_of(c("well","well_", "well_f_", "row_", "col_", "row", "column")), remove = FALSE)
+  } else { # if "condition" is present in the layout
+    if (  all(l_names[!l_names == "condition"] %in% common_cols) == TRUE ) { # if "condition" is the only column unique to the layout
+      common_cols <- c("well_", "well_f_", "row_", "col_", "row", "column") # retain the well column
+      print("all names in common cols ZZ")
+    } ### IX THIS--laout needs to have something left to combine
+  }
+  
+    layout_ <- layout_ %>%
+               select(-condition) %>%
+               unite("condition", -one_of(common_cols), remove = FALSE) %>%
+               mutate_if(is.factor, as.character)
+  by_well_ %>%
+    unnest_legacy() %>%
+    dplyr::select(-one_of(dup_cols )) %>% # if it's already in layout, drop it
+    dplyr::left_join(., layout_, by = c("well_", "well_f_", "row_", "col_")) %>%
+    group_by(condition, Temperature) %>%
+    dplyr::mutate(mean = mean(value),
+                  sd = sd(value),
+                  mean_norm = mean(value_norm),
+                  sd_norm = sd(value_norm)) %>%
+    ungroup() %>%
+    nest(data = c(Temperature, value, mean, sd, Temperature_norm, value_norm, mean_norm, sd_norm)) # THIS IS NOT nest_legacy
+}
+
+get_layout_vars <- function( df ) {
+  layout_vars <- names(df) %>%
+              .[!. %in% c("well_", "well_f_", "row_", "col_", "row", "column", "data")]
+  df %>%
+    select( one_of(layout_vars) ) %>%
+    plyr::mutate("-" = rep("", nrow(.)))
+}
+```
+
+```{r}
+choices <- list("one", "two", "three") # always stays the same; all possible options
+chosen <- list("one", "two") # what has been actively selected
+
+chosen_bool <- c(choices %in% chosen) %>% # convert this to a bool
+                  as.list() %>%
+                  set_names(choices) 
+chosen_bool
+
+chosen <- chosen_bool[chosen_bool == TRUE] %>% names()  # use the chosen bool to re-update chosen, as a list of names
+chosen
+
+
 ```
 
 
