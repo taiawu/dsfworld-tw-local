@@ -232,9 +232,36 @@ chosen_bool
 
 chosen <- chosen_bool[chosen_bool == TRUE] %>% names()  # use the chosen bool to re-update chosen, as a list of names
 chosen
+```
 
+```{r}
+
+df_mt <- head(mtcars) %>%
+  mutate(index = c(1:nrow(.)))
+
+df_mt_t <- df_mt %>% 
+  select(one_of("disp"))
+
+mt_filt <- (df_mt_t %>% as_vector()) %in% c(160, 108) 
+
+df_filt <- df_mt[mt_filt,]
+
+
+
+df_mt_t2 <- df_mt %>% 
+  select(one_of("mpg"))
+
+mt_filt2 <- (df_mt_t2 %>% as_vector()) %in% c(21.0) 
+
+df_filt2 <- df_mt[mt_filt2,]
+
+df_final <- inner_join(df_filt, df_filt2)
+df_filt
+df_filt2
+df_final
 
 ```
+
 
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
