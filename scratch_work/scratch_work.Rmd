@@ -261,6 +261,12 @@ df_filt2
 df_final
 
 ```
+```{r}
+head(mtcars) %>%
+  ggplot(aes(x = mpg, y = cyl)) +
+  geom_point()
+```
+
 
 
 

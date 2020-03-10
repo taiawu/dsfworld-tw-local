@@ -1,8 +1,10 @@
+# 
 library(shinyBS) # drop-down panels
 library(tidyverse) #  handling data structures and plotting
 
 source("support_scripts/upload_formatters.R")
 source("support_scripts/layout_handling.R")
+source("support_scripts/plotting.R")
 
 library(shinyalert) # pop-up error messages
 library(shinycssloaders) # spinning plot loading icon

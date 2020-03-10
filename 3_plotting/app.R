@@ -52,6 +52,7 @@ ui <- navbarPage("",
                                                        bsCollapse(id = "plot_aes", open = "Panel 2",
                                                                   bsCollapsePanel(p("Make plots", style = "font-family: 'Avenir Next'; font-size: 16px; color: black", align = "center"),
                                                                                   # update_plot
+                                                                                  uiOutput("trigger_df_1"),
                                                                                   uiOutput("update_plot"),
                                                                                   radioButtons("facet", "Make sub-plots",
                                                                                                c("Single plot" = "none",
@@ -197,6 +198,11 @@ server <- function(session, input, output) {
         actionButton("update_plot", p("Update plot", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),  width = '100%')
     })
     
+    # output$trigger_df_1 <- renderUI({
+    #     #req(values$df)
+    #     actionButton("trigger_df_1", p("trigger_df_1", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),  width = '100%')
+    # })
+    
     ########## End render GUI elements for the analysis page ######
     
     ######## eval selections, to pass to the plotting function #########
@@ -267,8 +273,37 @@ server <- function(session, input, output) {
         legend_pos})
     
     ######## end eval selections, to pass to the plotting function #########  
+    
     # update and re-render the plot only when the update-plot button is clicked!
-    plot <- eventReactive( input$update_plot, {
+    #init_plot <- eventReactive( input$trigger_df_1, { # when new data is uploaded
+    observeEvent(values$df_1, { # when data is uploaded, make a quick
+        print("initializing plot")
+        req(values$df_1) # only render the plot if there is data
+
+        df_RFU_plot <- unnest(values$df_1) %>%
+            plyr::mutate("-" = rep("", nrow(.))) %>%
+            plyr::mutate("- " = rep("", nrow(.)))
+
+        values$init_plot <- facet_func(df = df_RFU_plot,# reacts to the appearance and changes to the dataframe, to the uploading of format files
+                   mean_or_each = input$mean_or_each,
+                   color_by = !!input$color_by,
+                   linetype_by = !!input$linetype_by,
+                   use_linetypes = input$use_linetypes,
+                   facet = input$facet,
+                   facet_by = !!input$wrap_by,
+                   facet_rows = !!input$grid_rows,
+                   facet_cols = !!input$grid_cols,
+                   set_title = plot_title_d(),
+                   legend_title = plot_legend_d(),
+                   legend_linetype_title = plot_legend_linetype(),
+                   fix_free = input$fix_free,
+                   text_size = input$text_size,
+                   legend_position = legend_position(),
+                   x_title = input$x_title,
+                   y_title = input$y_title)
+    })
+    
+    plot <- eventReactive( input$update_plot,  { # only when the "update plot" button is clicked, update the plot 
         print("plot changed")
             req(values$df) # only render the plot if there is data
 
@@ -295,6 +330,21 @@ server <- function(session, input, output) {
                        y_title = input$y_title)
         })
     
+# value which changes depending on the following events
+    observeEvent(values$df_1,       {
+       # # print("making initial plot")
+       #  init_plot <- reactive({values$df %>%
+       #                          ggplot(aes(x = Temperature, y = value)) +
+       #                          geom_line(size = 0.5, alpha = 0.7) +
+       #                          theme_bw() +
+       #                          dsfworld_default})
+
+        values$which_plot <- "init_plot" }) # when data is updated, make the initialized plot
+
+    observeEvent(input$update_plot, {values$which_plot <- "main_plot" })
+    observeEvent(input$model_plot,  {values$which_plot <- "model_plot" })
+
+
  plot_height <- eventReactive(input$update_plot, {
             if (input$facet == "none") {
                  height <- 400 
@@ -310,12 +360,47 @@ server <- function(session, input, output) {
      height
     })
 
-    output$data <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
-        req(values$df)
-        plot()
-    }, height = function() plot_height()
-    
-    )
+ # observeEvent(values$which_plot, {
+ #     req(values$df)
+ #     print("values$which_plot")
+ #     print(values$which_plot)
+     
+     output$data <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
+         # df_RFU_plot <- unnest(values$df_1) %>%
+         #     plyr::mutate("-" = rep("", nrow(.))) %>%
+         #     plyr::mutate("- " = rep("", nrow(.)))
+         # 
+         # facet_func(df = df_RFU_plot,# reacts to the appearance and changes to the dataframe, to the uploading of format files
+         #                                mean_or_each = input$mean_or_each,
+         #                                color_by = !!input$color_by,
+         #                                linetype_by = !!input$linetype_by,
+         #                                use_linetypes = input$use_linetypes,
+         #                                facet = input$facet,
+         #                                facet_by = !!input$wrap_by,
+         #                                facet_rows = !!input$grid_rows,
+         #                                facet_cols = !!input$grid_cols,
+         #                                set_title = plot_title_d(),
+         #                                legend_title = plot_legend_d(),
+         #                                legend_linetype_title = plot_legend_linetype(),
+         #                                fix_free = input$fix_free,
+         #                                text_size = input$text_size,
+         #                                legend_position = legend_position(),
+         #                                x_title = input$x_title,
+         #                                y_title = input$y_title)
+         # # if (values$which_plot == "main_plot" ) {
+         # #     plot()
+         # # } else if (values$which_plot == "model_plot") {
+         # #     plot()
+         # # } else {
+         # #     values$init_plot
+         # # }
+         # values$init_plot
+         plot()
+     }, height = function() plot_height()
+     
+     ) 
+ # })
+
 } # end server
 # Run the application 
 shinyApp(ui = ui, server = server)
