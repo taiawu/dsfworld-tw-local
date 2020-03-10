@@ -73,11 +73,11 @@ ui <- navbarPage("",
                                                                                                c("Equal" = "fixed",
                                                                                                  "Independent" = "free")),
                                                                                   bsCollapsePanel(h5("Edit plot labels"),
-                                                                                                  textInput("plot_title", "Plot title", "Data Summary"),
+                                                                                                  textInput("plot_title", "Plot title", "Raw RFU Data"),
                                                                                                   textInput("legend_title", "Legend title", "Condition"),
                                                                                                   uiOutput("linetype_title"),
                                                                                                   textInput("y_title", "y-axis title", "RFU"),
-                                                                                                  textInput("x_title", "x-axis title", "Temperature (C)"),
+                                                                                                  textInput("x_title", "x-axis title", "Temperature (ºC)"),
                                                                                                   numericInput("text_size", "Plot text size", 10, min = 4, max = 20),
                                                                                                   checkboxInput("hide_legend", "Hide legend", FALSE)),
                                                                                   style = "default")
@@ -121,6 +121,7 @@ server <- function(session, input, output) {
     values$data_raw <- readRDS("values_df_with_layout.rds")
     values$df <- readRDS("values_df_with_layout.rds")
     values$df_1 <- readRDS("values_df_with_layout.rds")
+    values$plot_chosen <- "initial"
 
     ######## begin data layout and handling #########   
     # GUI elements
@@ -197,12 +198,6 @@ server <- function(session, input, output) {
         req(values$df)
         actionButton("update_plot", p("Update plot", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),  width = '100%')
     })
-    
-    # output$trigger_df_1 <- renderUI({
-    #     #req(values$df)
-    #     actionButton("trigger_df_1", p("trigger_df_1", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),  width = '100%')
-    # })
-    
     ########## End render GUI elements for the analysis page ######
     
     ######## eval selections, to pass to the plotting function #########
@@ -276,34 +271,22 @@ server <- function(session, input, output) {
     
     # update and re-render the plot only when the update-plot button is clicked!
     #init_plot <- eventReactive( input$trigger_df_1, { # when new data is uploaded
-    observeEvent(values$df_1, { # when data is uploaded, make a quick
-        print("initializing plot")
-        req(values$df_1) # only render the plot if there is data
-
-        df_RFU_plot <- unnest(values$df_1) %>%
-            plyr::mutate("-" = rep("", nrow(.))) %>%
-            plyr::mutate("- " = rep("", nrow(.)))
-
-        values$init_plot <- facet_func(df = df_RFU_plot,# reacts to the appearance and changes to the dataframe, to the uploading of format files
-                   mean_or_each = input$mean_or_each,
-                   color_by = !!input$color_by,
-                   linetype_by = !!input$linetype_by,
-                   use_linetypes = input$use_linetypes,
-                   facet = input$facet,
-                   facet_by = !!input$wrap_by,
-                   facet_rows = !!input$grid_rows,
-                   facet_cols = !!input$grid_cols,
-                   set_title = plot_title_d(),
-                   legend_title = plot_legend_d(),
-                   legend_linetype_title = plot_legend_linetype(),
-                   fix_free = input$fix_free,
-                   text_size = input$text_size,
-                   legend_position = legend_position(),
-                   x_title = input$x_title,
-                   y_title = input$y_title)
+    plot_initial <- eventReactive( values$data_raw,  { # only when the "update plot" button is clicked, update the plot 
+        print("plot changed")
+        req(values$df) # only render the plot if there is data
+        
+        unnest(values$df) %>%
+                ggplot(aes(x = Temperature, y = value, group = well)) +
+                    geom_line(size = 0.5, alpha = 0.7) +
+                    labs(title = "Raw RFU Data", x = "Temperature (ºC)", y = "RFU") +
+                    theme_bw() +
+                    dsfworld_default +
+                    theme(  text = element_text(size = 10*1.25),
+                            axis.text = element_text(size = 10),
+                            plot.title = element_text(lineheight=.8, face="bold", size = 10*1.5)) 
     })
     
-    plot <- eventReactive( input$update_plot,  { # only when the "update plot" button is clicked, update the plot 
+    plot_updated <- eventReactive( input$update_plot,  { # only when the "update plot" button is clicked, update the plot 
         print("plot changed")
             req(values$df) # only render the plot if there is data
 
@@ -330,76 +313,44 @@ server <- function(session, input, output) {
                        y_title = input$y_title)
         })
     
-# value which changes depending on the following events
-    observeEvent(values$df_1,       {
-       # # print("making initial plot")
-       #  init_plot <- reactive({values$df %>%
-       #                          ggplot(aes(x = Temperature, y = value)) +
-       #                          geom_line(size = 0.5, alpha = 0.7) +
-       #                          theme_bw() +
-       #                          dsfworld_default})
+    observeEvent(values$data_raw, { values$plot_chosen <- "initial"  })    
+    observeEvent(input$update_plot, { values$plot_chosen <- "updated"  })
+    observeEvent(values$show_model_plot, { values$show_model_plot <- "model"  })  
+  
+chosen_plot <- reactive({
+        if (values$plot_chosen == "updated") { # TRUE when the "update plot" button was clicked more recently than new data uploads or "show model plot"
+            plot_updated()
+        } else if (values$plot_chosen == "model") { # TRUE when the "show model plot" button was clicked more recently than new data uploads or "update model plot"
+            plot2()
+        } else { # if its the initial plot
+            plot_initial()  # this is the default
+        }
+    })
 
-        values$which_plot <- "init_plot" }) # when data is updated, make the initialized plot
-
-    observeEvent(input$update_plot, {values$which_plot <- "main_plot" })
-    observeEvent(input$model_plot,  {values$which_plot <- "model_plot" })
-
-
- plot_height <- eventReactive(input$update_plot, {
-            if (input$facet == "none") {
-                 height <- 400 
-            } else {
-                # adapted from https://github.com/rstudio/shiny/issues/650
-                h_dyn <- gg_facet_nrow_ng(plot()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot())))*(1/1.618)
-                
-                if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { 
-                         height <- session$clientData$output_data_width * (1/1.618)
-                } else { height <- h_dyn
-                }
-            }
+plot_height <- eventReactive(input$update_plot, {
+                if (input$facet == "none") {
+                    height <- 400 
+                } else {
+                    # adapted from https://github.com/rstudio/shiny/issues/650
+                    h_dyn <- gg_facet_nrow_ng(plot_updated()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot_updated())))*(1/1.618)
+                    
+                    if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { 
+                        height <- session$clientData$output_data_width * (1/1.618)
+                    } else { height <- h_dyn
+                    }
+                } 
      height
     })
 
- # observeEvent(values$which_plot, {
- #     req(values$df)
- #     print("values$which_plot")
- #     print(values$which_plot)
-     
-     output$data <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
-         # df_RFU_plot <- unnest(values$df_1) %>%
-         #     plyr::mutate("-" = rep("", nrow(.))) %>%
-         #     plyr::mutate("- " = rep("", nrow(.)))
-         # 
-         # facet_func(df = df_RFU_plot,# reacts to the appearance and changes to the dataframe, to the uploading of format files
-         #                                mean_or_each = input$mean_or_each,
-         #                                color_by = !!input$color_by,
-         #                                linetype_by = !!input$linetype_by,
-         #                                use_linetypes = input$use_linetypes,
-         #                                facet = input$facet,
-         #                                facet_by = !!input$wrap_by,
-         #                                facet_rows = !!input$grid_rows,
-         #                                facet_cols = !!input$grid_cols,
-         #                                set_title = plot_title_d(),
-         #                                legend_title = plot_legend_d(),
-         #                                legend_linetype_title = plot_legend_linetype(),
-         #                                fix_free = input$fix_free,
-         #                                text_size = input$text_size,
-         #                                legend_position = legend_position(),
-         #                                x_title = input$x_title,
-         #                                y_title = input$y_title)
-         # # if (values$which_plot == "main_plot" ) {
-         # #     plot()
-         # # } else if (values$which_plot == "model_plot") {
-         # #     plot()
-         # # } else {
-         # #     values$init_plot
-         # # }
-         # values$init_plot
-         plot()
-     }, height = function() plot_height()
-     
+output$data <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
+         chosen_plot()
+
+     }, height = function() 
+         if (values$plot_chosen == "initial") { 400 
+         } else {
+             plot_height() 
+             }  
      ) 
- # })
 
 } # end server
 # Run the application 
