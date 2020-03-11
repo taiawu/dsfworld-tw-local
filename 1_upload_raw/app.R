@@ -1,5 +1,5 @@
 # perhaps we could put the loading of packages into an observe event, to keep them all froam loading right at the start. would this make the first page faster?
-
+# 1_upload/app.R
 library(shinyBS) # drop-down panels
 library(shinyalert) # pop-up windows
 library(tidyverse) #  handling data structures and plotting
