@@ -125,3 +125,119 @@ plotDownload <- function(input, output, session, plotFun) { #https://github.com/
     }
   )
 }
+
+## for model fitting plots
+cond_df_model_for_plot <- function( model_df, df_BIC ) {
+  model_df %>%
+    group_by(well) %>%
+    nest() %>%
+    ungroup() %>%
+    full_join(df_BIC) %>%
+    unnest()  %>%
+    select(well, condition, Temperature, Temperature_norm, pred, value_norm, which_model, component, BIC) %>%
+    pivot_longer(-c(well, Temperature, Temperature_norm, which_model, component, BIC, condition), names_to = "which_value", values_to = "value") %>%
+    mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) 
+}
+
+cond_df_BIC_for_plot <- function( df_BIC ) {
+  df_BIC %>%
+    group_by(well) %>%
+    nest() %>%
+    ungroup() %>%
+    unnest() %>%
+    group_by(well) %>%
+    mutate(is_min = (BIC == min(BIC))) %>%
+    ungroup()%>%
+    mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) 
+}
+
+make_model_names <- function( model_names_present ) {
+  mods <- tibble(
+    model_names = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"),
+    model_names_f = factor(c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"), levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")),
+    human_read =  c("Fit 1", "Fit 2", "Fit 3", "Fit 4"),
+    human_read_f = factor(c("Fit 1", "Fit 2", "Fit 3", "Fit 4"), levels = c("Fit 1", "Fit 2", "Fit 3", "Fit 4"))
+  )
+  
+  mods_present <- mods %>%
+    filter(model_names %in% model_names_present) 
+  name_vec_f <- mods_present$human_read_f
+  names(name_vec_f) <- mods_present$model_names_f
+  
+  name_vec <- mods_present$human_read
+  names(name_vec) <- mods_present$model_names
+  
+  list("factor" = name_vec_f, "character" = name_vec)
+}
+
+match_well_to_cond <- function( df_models ) {
+  df <- df_models %>% distinct(well, .keep_all = TRUE)
+  wells <- map2(df$well, df$condition, paste, sep = "\n") %>% as_vector()
+  names(wells) <- df$well
+  wells
+}
+
+dsfworld_default_model <- theme( # adapted from free amino acids hit call
+  text = element_text(size = 10*1.25),
+  axis.text = element_text(size = 8*1.25),
+  axis.text.x = element_text(angle = 0, vjust = 0.5),
+  legend.position = "right",
+  plot.title = element_text(lineheight=.8, face="bold", size = 12*1.25),
+  panel.grid.minor = element_blank(),
+  panel.grid.major = element_blank(), 
+  strip.background = element_blank(),
+  strip.text.y = element_text(angle = 0),
+  aspect.ratio = (1/1.618)
+)
+
+plot_all_fits_shiny <- function(df_models_in, df_BIC_in) {
+  df_models <- cond_df_model_for_plot(df_models_in, df_BIC_in ) # create the plot-conditioned model df
+  df_BIC <- cond_df_BIC_for_plot ( df_BIC_in ) # create the plot-conditioned BIC df
+  
+  # create vectors used to label and position data within the plots
+  model_names <- make_model_names( df_models$which_model %>% unique() )
+  well_names <- match_well_to_cond( df_mod_test )
+  mid_temp <- (max(df_models$Temperature) - min(df_models$Temperature))/2 + min(df_models$Temperature)
+  
+  
+  # create the plot
+  df_models %>%
+    ggplot() +
+    geom_line (aes(x = Temperature, # RFU data, fitted and "real"
+                   y = value, 
+                   linetype = which_value, 
+                   color = component, 
+                   group = interaction(which_model, component, which_value)
+    ), 
+    
+    alpha = 0.5) +
+    geom_text (data = df_BIC, aes(label = paste0("BIC ", round(BIC, 0)), # BIC values for fits
+                                  x = mid_temp,
+                                  y = 1.3,
+                                  group = well,
+                                  alpha = is_min),
+               size = 3) +
+    facet_grid (well~which_model_f,
+                labeller = labeller(well = well_names,
+                                    which_model_f = model_names$character)
+    ) +
+    
+    scale_alpha_manual (values = c(0.7, 1), guide = FALSE) +
+    scale_linetype_manual (values = c("pred" = "solid", "value_norm" = "dashed"),
+                           name="",
+                           breaks=c( "value_norm", "pred"),
+                           labels=c("Data", "Fits")
+    ) +
+    scale_color_manual (values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"),
+                        name="Fit component",
+                        breaks=c("full_pred", "sigmoid_1", "sigmoid_2", "initial_decay"),
+                        labels=c("Final fit", "Sigmoid 1", "Sigmoid 2", "Initial RFU")
+    ) +
+    guides  (linetype = guide_legend(order = 1),
+             color = guide_legend(order = 2))+
+    
+    ylim (c(0, 1.4))+
+    theme_bw() +
+    dsfworld_default_model +
+    labs (x = "Temperature (ºC)", y = "Normalized RFU")
+}

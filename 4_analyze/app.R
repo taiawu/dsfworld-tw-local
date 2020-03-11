@@ -25,6 +25,7 @@ named_mods <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") %>%
 
 ui <- navbarPage( useShinyalert(),
                 
+                
                  #tabPanel(p("to data analysis", style = "font-family: 'Avenir Next'; font-size: 20px; color: grey",align = "right")),
                  # Data Analysis --------------------------------------------------------------------------------
                  tabPanel(p("to data analysis", style = "font-family: 'Avenir Next'; font-size: 20px; color: grey",align = "center"), value = "data_analysis_mother", # end tab panel (tabset, div, main still remaining)
@@ -88,7 +89,8 @@ ui <- navbarPage( useShinyalert(),
                                                                                   ),
                                                                                   
                                                                                   bsCollapsePanel(p("By sigmoid fitting", style = "font-family: 'Avenir Next'; font-size: 14px; color: black",align = "center"),
-                                                                                                  p("Select the models you would like to fit to your data below.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
+                                                                                                  #wellPanel(
+                                                                                                  p("Select the models you would like to fit to your data below.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),
                                                                                                   splitLayout(cellWidths = c("25%", "25%", "25%", "25%"), 
                                                                                                               p("Fit 1", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
                                                                                                               p("Fit 2", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
@@ -121,29 +123,15 @@ ui <- navbarPage( useShinyalert(),
                                                                                                             "right", options = list(container = "body")),
                                                                                                   p(" ", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
                                                                                                 
-                                                                                                  DT::dataTableOutput("tm_table_render_models"), #style = "height:400px;"
+                                                                                                  
+                                                                                                     
+                                                                                                      DT::dataTableOutput("tm_table_render_models"), #style = "height:400px;"
+                                                                                                  p("-----", style = "font-family: 'Avenir Next'; font-size: 30px; color: white",align = "center"),
+                                                                                                  uiOutput("trim_ends"),  
+
                                                                                                   p(" ", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
-                                                                                                  bsCollapsePanel(p("Add Tm' and fits to plots", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                                 
-                                                                                                                  uiOutput("choose_model_tm"),
-                                                                                                                  checkboxInput("show_Tm_mods", "Show Tm' on plots", FALSE),
-                                                                                                                  checkboxInput("show_fit", "Show fits", FALSE),
-                                                                                                                  checkboxInput("show_fit_comps", "Show fit components", FALSE),
-                                                                                                                  p("Fits and Tm' are ploted in black by default", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "left") %>% strong(),
-                                                                                                                  checkboxInput("show_Tm_mods_colors", "Apply colors  to Tm'", FALSE),
-                                                                                                                  checkboxInput("show_fit_comps_colors", "Apply colors  to fit lines", FALSE),
-                                                                                                                  uiOutput("update_model_plots")
-                                                                                                      
-                                                                                                  ),
-                                                                                                  
-                                                                                                  
-                                                                                                  bsCollapsePanel(p("Improve fits", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                                  p("Fit data only in the following temperature range", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),
-                                                                                                           
-                                                                                                                  uiOutput("trim_ends")
-                                                                                                  ),
-                                                                                                  bsCollapsePanel(p("Select the best model for each condition", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                                  p("Click 'Plot model comparision' below to display the four models side-by-side. Use this plot to select the best model for each condition. ", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
+                                                                                                  bsCollapsePanel(p("Plot and selet models for each condition", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
+                                                                                                                  #p("Click 'Plot model comparision' below to display the four models side-by-side. Use this plot to select the best model for each condition. ", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                                   uiOutput("show_BIC_plot"),
                                                                                                                   
                                                                                                                   p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
@@ -162,7 +150,7 @@ ui <- navbarPage( useShinyalert(),
                                                                                                   )
                                                                                   ), style = "default"
                                                                   )
-                                                       )
+                                                       ), width = 5
                                                        
                                                    ),
                                                    
@@ -188,11 +176,11 @@ ui <- navbarPage( useShinyalert(),
                                                                        textInput("plot_download_name", "Downloaded plot name", value = "dsfworld_plot")
                                                            ),
                                                            plotOutput("plot", height = "auto") %>% withSpinner(color="#525252"), style = ("overflow-y:scroll; max-height: 600px") 
-                                                       ))
+                                                       ), width = 7)
                                                )
                                       )
                           )) # end tabset Panel (contains all "analysis sub-panels)
-                 
+#div (dataTableOutput ("tm_table_render_models"), style = "font-size: 70%")            
 ) # end 
 
 # Define server logic required to draw a histogram
@@ -328,7 +316,9 @@ server <- function(session, input, output) {
     # set initial values for smoothing and normalizing
     output$trim_ends <- renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
         req(values$df)
-        sliderInput("trim_ends", "", min = min(unnest(values$df)$Temperature), max = max(unnest(values$df)$Temperature),
+        sliderInput("trim_ends", 
+                    p("Restrict fits to a temperature range", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"), 
+                    min = min(unnest(values$df)$Temperature), max = max(unnest(values$df)$Temperature),
                     value = c(min(unnest(values$df)$Temperature),
                               max(unnest(values$df)$Temperature)),
                     step = 1)
@@ -390,7 +380,8 @@ server <- function(session, input, output) {
                         plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Fit 1", "Fit 2", "Fit 3", "Fit 4"), c("Other")))  %>% # move this to later, for the for-display table only!
             set_names(c("Condition", "Model", "Tma 1", "Tma 1 SD", "Tma 2", "Tma 2 SD")) %>%          
             discard(~all(is.na(.x))) #%>% # get rid of the columns which are all NA (true if the model is not selected)
-        write_rds(values$s1_list, "values_s1_list.rds")
+        # write_rds(values$s1_list, "values_s1_list.rds")
+        
         # if new data is uploaded, reset all of the buttons as well. perhaps we should set these to watch values$data (unnamed), so it doesn't get over-written by renaming, but i'd need to think more carefully about how to incorporate the names downstream....
         updateButton(session, "s1",  value = TRUE)
         updateButton(session, "s1_d",  value = FALSE)
@@ -431,10 +422,10 @@ server <- function(session, input, output) {
                     values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_d_list$df_BIC)
                     values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_d_list$tm_table_models)
                 }}
-            write_rds(values$df_models, "values_df_models.rds")
-            write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
-            write_rds(values$df_tm_models, "values_df_tm_models.rds")
-            #write_rds(values$df_models, "values_df_models.rds")
+            # write_rds(values$df_models, "values_df_models.rds")
+            # write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
+            # write_rds(values$df_tm_models, "values_df_tm_models.rds")
+            # write_rds(values$df_models, "values_df_models.rds")
             
             #update the tm table for display df_tm_models_table <- df_tm_models %>%
             model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")# doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
@@ -457,19 +448,27 @@ server <- function(session, input, output) {
     # render the model table
     output$tm_table_render_models <- DT::renderDataTable({ ### new for models
         req(values$df_tm_models_table)
-        values$df_tm_models_table
+        values$df_tm_models_table 
     },
     options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
     
-    
+
     
     ## display the model plot, with all  comonents. 
     ### choose the best model 
     
-    # model_plot <- renderPlot({
-    #     
-    #     plot_all_fits(values$)
-    # })
+    output$show_BIC_plot <- renderUI({
+        req(values$df)
+        actionButton("show_BIC_plots", 
+                     p("Display data with fits for all selected models.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),  width = '100%')
+                     
+                     
+                     #p("Plot model comparison.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black", align = "center") %>% strong(),  width = '100%')
+    })
+    
+    model_plot <- renderPlot({
+        plot_all_fits_shiny(values$df_models, values$df_BIC_models)
+    })
     
     # 
 } # end server
