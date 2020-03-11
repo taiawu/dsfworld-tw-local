@@ -433,14 +433,22 @@ fit_any_model <- function(by_variable, which_model) {
   
 }
 
-# s3_BIC <- s3$glance
+# # s3_BIC <- s3$glance
+# extract_model_element <- function(model_df, info, sub_info, pred_name) {
+#   model_df %>%
+#     #select(variable, info)  %>%
+#     select(well, info)  %>%
+#     unnest_legacy() %>%
+#     #select(variable, sub_info) %>%
+#     select(well, sub_info) %>%
+#     plyr::mutate(which_model = rep(pred_name, nrow(.))) 
+# }
+
 extract_model_element <- function(model_df, info, sub_info, pred_name) {
   model_df %>%
-    #select(variable, info)  %>%
-    select(well, info)  %>%
+    select(well, condition, info)  %>%
     unnest_legacy() %>%
-    #select(variable, sub_info) %>%
-    select(well, sub_info) %>%
+    select(well, condition, sub_info) %>%
     plyr::mutate(which_model = rep(pred_name, nrow(.))) 
 }
 
@@ -599,13 +607,30 @@ build_s2_d_predictions <- function( df ) {
   rbind(s1, s2, sd)
 }
 
+# extract_preds <- function( df, pred_name ) {
+#   df %>% 
+#     unnest_legacy(predictions) %>% 
+#     #select( variable, Temperature, Temperature_norm, pred, value_norm ) %>% 
+#     select( well, Temperature, Temperature_norm, pred, value_norm ) %>% 
+#     #mutate(pred_model = rep(pred_name, nrow(.))) %>% #%>% rename(s1_pred = pred)
+#     plyr::mutate(which_model = rep(pred_name, nrow(.))) %>% #%>% rename(s1_pred = pred)
+#     plyr::mutate(component = rep("full_pred", nrow(.))) 
+# }
+# 
+# build_predictions <- function(model_name, df) {
+#   if (model_name == "s1_pred")   { out <- build_s1_predictions(df)
+#   } else if (model_name == "s1_d_pred") { out <- build_s1_d_predictions(df)
+#   } else if (model_name == "s2_pred")   { out <- build_s2_predictions(df)
+#   } else if (model_name == "s2_d_pred") { out <- build_s2_d_predictions(df) 
+#   }
+#   out
+# }
+
 extract_preds <- function( df, pred_name ) {
   df %>% 
     unnest_legacy(predictions) %>% 
-    #select( variable, Temperature, Temperature_norm, pred, value_norm ) %>% 
-    select( well, Temperature, Temperature_norm, pred, value_norm ) %>% 
-    #mutate(pred_model = rep(pred_name, nrow(.))) %>% #%>% rename(s1_pred = pred)
-    plyr::mutate(which_model = rep(pred_name, nrow(.))) %>% #%>% rename(s1_pred = pred)
+    select( well, Temperature, Temperature_norm, pred, value_norm , condition) %>% 
+    plyr::mutate(which_model = rep(pred_name, nrow(.))) %>% 
     plyr::mutate(component = rep("full_pred", nrow(.))) 
 }
 
@@ -615,7 +640,9 @@ build_predictions <- function(model_name, df) {
   } else if (model_name == "s2_pred")   { out <- build_s2_predictions(df)
   } else if (model_name == "s2_d_pred") { out <- build_s2_d_predictions(df) 
   }
-  out
+  out 
+  # %>%
+  #   select( well, Temperature, Temperature_norm, pred, value_norm , condition, component) 
 }
 
 readable_model_names <- function( model ) {
@@ -931,4 +958,29 @@ facet_func2 <- function(df,
   }
   
   p
+}
+
+
+#### plot the models
+plot_all_fits <- function(df_models, df_BIC, index_range) {
+  df_BIC_p <- df_BIC  
+  # %>%
+  #             dplyr::filter(index %in% index_range)
+  
+  df_models %>%
+    #dplyr::filter(index %in% index_range) %>%
+    pivot_longer(-c(index, Temperature_norm, which_model, component, BIC), names_to = "which_value", values_to = "value") %>%
+    
+    ggplot() +
+    geom_line(aes(x = Temperature_norm, y = value, linetype = which_value, color = component, group = interaction(which_model, component, which_value)), alpha = 0.5) +
+    theme_void()+
+    geom_text(data = df_BIC_p, aes(label = paste0("BIC ", round(BIC, 0)),
+                                   x = 0.5,
+                                   y = 1.3,
+                                   group = index,
+                                   alpha = is_min),
+              size = 3) +
+    scale_alpha_manual(values = c(0.3, 1)) +
+    scale_color_manual(values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"))+
+    facet_grid(index~which_model) 
 }

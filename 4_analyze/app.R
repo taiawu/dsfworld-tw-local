@@ -20,7 +20,8 @@ library(rhandsontable) # user-interactive tables
 library(shiny) # for shiny web-apps 
 
 named_mods <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") %>%
-    set_names("Model 1", "Model 2", "Model 3", "Model 4")
+    #set_names("Model 1", "Model 2", "Model 3", "Model 4")
+    set_names("Fit 1", "Fit 2", "Fit 3", "Fit 4")
 
 ui <- navbarPage( useShinyalert(),
                 
@@ -89,10 +90,10 @@ ui <- navbarPage( useShinyalert(),
                                                                                   bsCollapsePanel(p("By sigmoid fitting", style = "font-family: 'Avenir Next'; font-size: 14px; color: black",align = "center"),
                                                                                                   p("Select the models you would like to fit to your data below.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                   splitLayout(cellWidths = c("25%", "25%", "25%", "25%"), 
-                                                                                                              p("Model 1", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                              p("Model 2", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                              p("Model 3", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                              p("Model 4", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center")
+                                                                                                              p("Fit 1", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
+                                                                                                              p("Fit 2", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
+                                                                                                              p("Fit 3", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
+                                                                                                              p("Fit 4", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center")
                                                                                                   ),
                                                                                                   
                                                                                                   splitLayout(cellWidths = c("25%", "25%", "25%", "25%"), 
@@ -110,13 +111,13 @@ ui <- navbarPage( useShinyalert(),
                                                                                                                        block = TRUE, type = "toggle", value = FALSE)
                                                                                                   ),
                                                                                                   
-                                                                                                  bsTooltip("s1", "Model 1: One sigmoid with decay",
+                                                                                                  bsTooltip("s1", "Fit 1: One sigmoid with decay",
                                                                                                             "right", options = list(container = "body")),
-                                                                                                  bsTooltip("s1_d", "Model 2: One sigmoid with decay and starting-temperature fluorescence",
+                                                                                                  bsTooltip("s1_d", "Fit 2: One sigmoid with decay and starting-temperature fluorescence",
                                                                                                             "right", options = list(container = "body")),
-                                                                                                  bsTooltip("s2", "Model 3: Two sigmoids with decays",
+                                                                                                  bsTooltip("s2", "Fit 3: Two sigmoids with decays",
                                                                                                             "right", options = list(container = "body")),
-                                                                                                  bsTooltip("s2_d", "Model 4: Two sigmoids with decays and starting-temperature fluorescence",
+                                                                                                  bsTooltip("s2_d", "Fit 4: Two sigmoids with decays and starting-temperature fluorescence",
                                                                                                             "right", options = list(container = "body")),
                                                                                                   p(" ", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
                                                                                                 
@@ -325,6 +326,31 @@ server <- function(session, input, output) {
 
     # ## by model fitting
     # set initial values for smoothing and normalizing
+    output$trim_ends <- renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
+        req(values$df)
+        sliderInput("trim_ends", "", min = min(unnest(values$df)$Temperature), max = max(unnest(values$df)$Temperature),
+                    value = c(min(unnest(values$df)$Temperature),
+                              max(unnest(values$df)$Temperature)),
+                    step = 1)
+    }) # trim the ends off of the data to improve fitting
+    
+    observeEvent(input$trim_ends, {print("input$trim_ends")
+        print(input$trim_ends)
+        print(str(input$trim_ends))
+        
+        if ( (input$trim_ends[2] - input$trim_ends[1]) < 25 ) {
+            updateSliderInput(session, "trim_ends", 
+                              
+                              value = c(min(unnest(values$df)$Temperature),
+                                        max(unnest(values$df)$Temperature)),
+                              step =  1)
+            shinyalert("Not enough data points remaining", "Please increase range to at least 25 measurements")
+        } else {
+            values$df_fit <- values$df %>%
+                mutate(data = map(data, ~ filter(., Temperature %>% between(input$trim_ends[1], input$trim_ends[2])))) 
+        }
+    })
+    
     observeEvent(values$df_fit, { # data_raw(), { ### CHANGE THIS BACK TO data_raw() for integration!!!!!!!!!
         tryCatch({ # REVISIT-- should this be called on data_raw() for any reason?
             low_T <-  values$df_fit %>% unnest() %>% .$Temperature %>% min() 
@@ -361,23 +387,16 @@ server <- function(session, input, output) {
         
         values$df_tm_models_table <- values$df_tm_models %>%
                         dplyr::filter( which_model == "s1_pred"  ) %>%
-                        plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
+                        plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Fit 1", "Fit 2", "Fit 3", "Fit 4"), c("Other")))  %>% # move this to later, for the for-display table only!
             set_names(c("Condition", "Model", "Tma 1", "Tma 1 SD", "Tma 2", "Tma 2 SD")) %>%          
             discard(~all(is.na(.x))) #%>% # get rid of the columns which are all NA (true if the model is not selected)
-        
+        write_rds(values$s1_list, "values_s1_list.rds")
         # if new data is uploaded, reset all of the buttons as well. perhaps we should set these to watch values$data (unnamed), so it doesn't get over-written by renaming, but i'd need to think more carefully about how to incorporate the names downstream....
         updateButton(session, "s1",  value = TRUE)
         updateButton(session, "s1_d",  value = FALSE)
         updateButton(session, "s2",  value = FALSE)
         updateButton(session, "s2_d",  value = FALSE)
     })
-    
-    # render the model table
-    output$tm_table_render_models <- DT::renderDataTable({ ### new for models
-        req(values$df_tm_models_table)
-        values$df_tm_models_table
-    },
-    options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
     
     # ahandle model selections
     observeEvent( { input$s1
@@ -412,6 +431,10 @@ server <- function(session, input, output) {
                     values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_d_list$df_BIC)
                     values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_d_list$tm_table_models)
                 }}
+            write_rds(values$df_models, "values_df_models.rds")
+            write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
+            write_rds(values$df_tm_models, "values_df_tm_models.rds")
+            #write_rds(values$df_models, "values_df_models.rds")
             
             #update the tm table for display df_tm_models_table <- df_tm_models %>%
             model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")# doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
@@ -419,7 +442,7 @@ server <- function(session, input, output) {
            
             values$df_tm_models_table <- values$df_tm_models %>%
                 dplyr::filter( which_model %in% model_name_true()  ) %>%
-                plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
+                plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Fit 1", "Fit 2", "Fit 3", "Fit 4"), c("Other")))  %>% # move this to later, for the for-display table only!
                 set_names(c("Condition", "Model", "Tma 1", "Tma 1 SD", "Tma 2", "Tma 2 SD")) %>%
                 discard(~all(is.na(.x)))
             
@@ -431,30 +454,24 @@ server <- function(session, input, output) {
             )
         })
     
-    output$trim_ends <- renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
-        req(values$df)
-        sliderInput("trim_ends", "", min = min(unnest(values$df)$Temperature), max = max(unnest(values$df)$Temperature),
-                    value = c(min(unnest(values$df)$Temperature),
-                              max(unnest(values$df)$Temperature)),
-                    step = 1)
-    }) # trim the ends off of the data to improve fitting
+    # render the model table
+    output$tm_table_render_models <- DT::renderDataTable({ ### new for models
+        req(values$df_tm_models_table)
+        values$df_tm_models_table
+    },
+    options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
     
-    observeEvent(input$trim_ends, {print("input$trim_ends")
-        print(input$trim_ends)
-        print(str(input$trim_ends))
-        
-        if ( (input$trim_ends[2] - input$trim_ends[1]) < 25 ) {
-            updateSliderInput(session, "trim_ends", 
-                              
-                              value = c(min(unnest(values$df)$Temperature),
-                                        max(unnest(values$df)$Temperature)),
-                              step =  1)
-            shinyalert("Not enough data points remaining", "Please increase range to at least 25 measurements")
-        } else {
-            values$df_fit <- values$df %>%
-                mutate(data = map(data, ~ filter(., Temperature %>% between(input$trim_ends[1], input$trim_ends[2])))) 
-        }
-        })
+    
+    
+    ## display the model plot, with all  comonents. 
+    ### choose the best model 
+    
+    # model_plot <- renderPlot({
+    #     
+    #     plot_all_fits(values$)
+    # })
+    
+    # 
 } # end server
 # Run the application 
 shinyApp(ui = ui, server = server)

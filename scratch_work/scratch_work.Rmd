@@ -276,6 +276,636 @@ df_c <- left_join(b, a, by = c("disp_" = "disp"))
 df_c %>% filter(., between(hp, 80, 150))
 ```
 
+# making the model plots
+```{r}
+## a fully working example from exp0794
+make_all_fits_794 <- function(df_models, df_BIC, index_range) {
+  df_BIC_p <- df_BIC  %>%
+              dplyr::filter(index %in% index_range)
+  
+  df_models %>%
+      dplyr::filter(index %in% index_range) %>%
+      pivot_longer(-c(index, Temperature_norm, which_model, component, BIC), names_to = "which_value", values_to = "value") %>%
+    
+      ggplot() +
+      geom_line(aes(x = Temperature_norm, y = value, linetype = which_value, color = component, group = interaction(which_model, component, which_value)), alpha = 0.5) +
+      theme_void()+
+      geom_text(data = df_BIC_p, aes(label = paste0("BIC ", round(BIC, 0)),
+                                     x = 0.5,
+                                     y = 1.3,
+                                     group = index,
+                                     alpha = is_min),
+                                     size = 3) +
+      scale_alpha_manual(values = c(0.3, 1)) +
+      scale_color_manual(values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"))+
+      facet_grid(index~which_model) 
+}
+
+exp0794_df_p <- readRDS("Exp0794--df_fit_p_datastructure_to_make_fit_plots.rds")
+exp0795_df_bic <-readRDS("~/Box Sync/git/dsfworld6/scratch_work/Exp0794--df_BIC_p_datastructure_to_make_fit_plots.rds")
+
+make_all_fits_794(exp0794_df_p , exp0795_df_bic, c(1:2))
+```
+
+
+```{r}
+cond_df_model_for_plot <- function( model_df, df_BIC ) {
+  model_df %>%
+      group_by(well) %>%
+      nest() %>%
+      ungroup() %>%
+      full_join(df_BIC) %>%
+      unnest()  %>%
+      select(well, condition, Temperature, Temperature_norm, pred, value_norm, which_model, component, BIC) %>%
+      pivot_longer(-c(well, Temperature, Temperature_norm, which_model, component, BIC, condition), names_to = "which_value", values_to = "value") %>%
+      mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) 
+  }
+
+cond_df_BIC_for_plot <- function( df_BIC ) {
+        df_BIC %>%
+          group_by(well) %>%
+          nest() %>%
+          ungroup() %>%
+          unnest() %>%
+          group_by(well) %>%
+          mutate(is_min = (BIC == min(BIC))) %>%
+          ungroup()%>%
+          mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) 
+}
+
+make_model_names <- function( model_names_present ) {
+  mods <- tibble(
+            model_names = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"),
+            model_names_f = factor(c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"), levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")),
+            human_read =  c("Fit 1", "Fit 2", "Fit 3", "Fit 4"),
+            human_read_f = factor(c("Fit 1", "Fit 2", "Fit 3", "Fit 4"), levels = c("Fit 1", "Fit 2", "Fit 3", "Fit 4"))
+          )
+
+    mods_present <- mods %>%
+                     filter(model_names %in% model_names_present) 
+    name_vec_f <- mods_present$human_read_f
+    names(name_vec_f) <- mods_present$model_names_f
+    
+    name_vec <- mods_present$human_read
+    names(name_vec) <- mods_present$model_names
+    
+    list("factor" = name_vec_f, "character" = name_vec)
+}
+
+match_well_to_cond <- function( df_models ) {
+  df <- df_models %>% distinct(well, .keep_all = TRUE)
+  wells <- map2(df$well, df$condition, paste, sep = "\n") %>% as_vector()
+  names(wells) <- df$well
+  wells
+}
+ 
+   
+
+# # wexported directly from dsfworld
+# df_models_shiny <- readRDS("../4_analyze/values_df_models.rds")
+# df_BIC_models_shiny <- readRDS("../4_analyze/values_df__BIC_models.rds")
+# s1_list_shiny <- readRDS("../4_analyze/values_s1_list.rds")
+
+df_mod_test <- cond_df_model_for_plot(df_models_shiny, df_BIC_models_shiny )
+df_mod_bic_test <- cond_df_BIC_for_plot ( df_BIC_models_shiny )
+
+
+
+```
+
+```{r}
+dsfworld_default_model <- theme( # adapted from free amino acids hit call
+  text = element_text(size = 10*1.25),
+  axis.text = element_text(size = 8*1.25),
+  axis.text.x = element_text(angle = 0, vjust = 0.5),
+  legend.position = "right",
+  plot.title = element_text(lineheight=.8, face="bold", size = 12*1.25),
+  panel.grid.minor = element_blank(),
+  panel.grid.major = element_blank(), 
+  strip.background = element_blank(),
+  strip.text.y = element_text(angle = 0),
+  aspect.ratio = (1/1.618)
+)
+
+plot_all_fits_shiny <- function(df_models, df_BIC) {
+  # create vectors used to label and position data within the plots
+   model_names <- make_model_names( df_models$which_model %>% unique() )
+   well_names <- match_well_to_cond( df_mod_test )
+   mid_temp <- (max(df_models$Temperature) - min(df_models$Temperature))/2 + min(df_models$Temperature)
+   
+  
+   # create the plot
+  df_models %>%
+    ggplot() +
+        geom_line (aes(x = Temperature, # RFU data, fitted and "real"
+                      y = value, 
+                      linetype = which_value, 
+                      color = component, 
+                      group = interaction(which_model, component, which_value)
+                      ), 
+                      
+                     alpha = 0.5) +
+        geom_text (data = df_BIC, aes(label = paste0("BIC ", round(BIC, 0)), # BIC values for fits
+                                         x = mid_temp,
+                                         y = 1.3,
+                                         group = well,
+                                         alpha = is_min),
+                                         size = 3) +
+        facet_grid (well~which_model_f,
+                      labeller = labeller(well = well_names,
+                      which_model_f = model_names$character)
+                      ) +
+        
+        scale_alpha_manual (values = c(0.7, 1), guide = FALSE) +
+        scale_linetype_manual (values = c("pred" = "solid", "value_norm" = "dashed"),
+                                name="",
+                                breaks=c( "value_norm", "pred"),
+                                labels=c("Data", "Fits")
+                                ) +
+        scale_color_manual (values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"),
+                                name="Fit component",
+                                breaks=c("full_pred", "sigmoid_1", "sigmoid_2", "initial_decay"),
+                                labels=c("Final fit", "Sigmoid 1", "Sigmoid 2", "Initial RFU")
+                                ) +
+        guides  (linetype = guide_legend(order = 1),
+                 color = guide_legend(order = 2))+
+        
+        ylim (c(0, 1.4))+
+        theme_bw() +
+        dsfworld_default_model +
+        labs (x = "Temperature (ºC)", y = "Normalized RFU")
+}
+
+plot_all_fits_shiny(df_mod_test, df_mod_bic_test)
+```
+
+
+
+```{r}
+
+  cond_df_model_for_plot <- function( model_df, df_BIC ) {
+  model_df %>%
+      group_by(well) %>%
+      nest() %>%
+      ungroup() %>%
+      full_join(df_BIC) %>%
+      unnest()  %>%
+   # select(well, Temperature_norm, pred, value_norm, which_model, component, BIC)
+      select(well, condition, Temperature_norm, pred, value_norm, which_model, component, BIC)
+  }
+
+  
+df_model_for_p <- cond_df_model_for_plot( df_models_shiny, df_BIC_models_shiny )
+  
+p_test_df <- df_model_for_p %>%
+  pivot_longer(-c(well, Temperature_norm, which_model, component, BIC, condition), names_to = "which_value", values_to = "value") %>%
+  mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) %>%
+  filter(is.na(.$component) == FALSE ) 
+
+   # df_models %>%
+   #    #pivot_longer(-c(well, Temperature_norm, which_model, component, BIC, condition), names_to = "which_value", values_to = "value") %>% #model_names$factor %>% names()
+   #  pivot_longer(-c(well, Temperature_norm, which_model, component, BIC), names_to = "which_value", values_to = "value") %>% #model_names$factor %>% names()
+   #    mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) %>%
+   #      filter(is.na(.$component) == FALSE ) %>%
+  
+```
+
+
+
+
+
+
+```{r}
+# make_all_fits <- function(df_models, df_BIC) {
+#   model_names <- make_model_names( df_models$which_model %>% unique() )
+# 
+# well_labs <- df_models$well
+# names(well_labs) <- df_models$condition
+# 
+#   df_BIC_p <- df_BIC  %>%
+#     mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) 
+# 
+#   df_models %>%
+#       ggplot() +
+#       geom_line(aes(x = Temperature_norm, 
+#                     y = value, 
+#                     linetype = which_value, 
+#                     color = component, 
+#                     group = interaction(which_model, component, which_value)
+#                     ), 
+#                     alpha = 0.5) +
+#       theme_void() +
+#       geom_text(data = df_BIC_p, aes(label = paste0("BIC ", round(BIC, 0)),
+#                                      x = 0.5,
+#                                      y = 1.3,
+#                                      group = well,
+#                                      alpha = is_min),
+#                                      size = 3) +
+#       scale_alpha_manual(values = c(0.3, 1)) +
+#       scale_color_manual(values = c("full_pred" = "#081d58", "initial_decay" = "red", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"))+
+#       facet_grid(well~which_model_f,
+#                   labeller = labeller(which_model_f = model_names$character))
+# }
+```
+
+
+
+
+```{r}
+
+cond_df_model_for_plot <- function( model_df, df_BIC ) {
+  model_df %>%
+      group_by(well) %>%
+      nest() %>%
+      ungroup() %>%
+      full_join(df_BIC) %>%
+      unnest()  %>%
+   # select(well, Temperature_norm, pred, value_norm, which_model, component, BIC)
+      select(well, condition, Temperature_norm, pred, value_norm, which_model, component, BIC)
+}
+
+cond_df_BIC_for_plot <- function( df_BIC ) {
+        df_BIC %>%
+          group_by(well) %>%
+          nest() %>%
+          ungroup() %>%
+          unnest() %>%
+          group_by(well) %>%
+          mutate(is_min = (BIC == min(BIC))) %>%
+          ungroup()
+}
+
+df_model_for_p <- cond_df_model_for_plot( df_models_shiny, df_BIC_models_shiny )
+BIC_for_p <- cond_df_BIC_for_plot(df_BIC_models_shiny) 
+df_model_for_p
+BIC_for_p
+
+exp0794_df_p <- readRDS("Exp0794--df_fit_p_datastructure_to_make_fit_plots.rds")
+exp0794_df_p %>% names()
+df_model_for_p %>% names()
+#make_all_fits2(df_model_for_p, BIC_for_p)
+# df_fit_p_shiny <- df_all_fits_shiny %>%
+#             select(well, Temperature_norm, pred, value_norm, which_model, component, BIC)
+# 
+# df_fit_p_shiny
+# df_models_shiny 
+```
+```{r}
+
+make_model_names <- function( model_names_present ) {
+  mods <- tibble(
+            model_names = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"),
+            model_names_f = factor(c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"), levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")),
+            human_read =  c("Fit 1", "Fit 2", "Fit 3", "Fit 4"),
+            human_read_f = factor(c("Fit 1", "Fit 2", "Fit 3", "Fit 4"), levels = c("Fit 1", "Fit 2", "Fit 3", "Fit 4"))
+          )
+
+mods_present <- mods %>%
+                 filter(model_names %in% model_names_present) 
+
+# name_vec <- mods_present$model_names_f 
+# names(name_vec) <- mods_present$human_read_f
+
+name_vec_f <- mods_present$human_read_f
+names(name_vec_f) <- mods_present$model_names_f
+
+name_vec <- mods_present$human_read
+names(name_vec) <- mods_present$model_names
+
+list("factor" = name_vec_f, "character" = name_vec)
+}
+
+model_names <- make_model_names( df_model_for_p$which_model %>% unique() )
+model_names$character
+model_names$factor %>% names()
+
+```
+```{r}
+
+p_test <-   df_model_for_p  %>%
+      pivot_longer(-c(well, Temperature_norm, which_model, component, BIC, condition), names_to = "which_value", values_to = "value") %>% #model_names$factor %>% names()
+      mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) %>%
+        filter(is.na(.$component) == FALSE ) #%>%#%>% select(component) %>% table()
+p_test 
+```
+
+
+
+```{r}
+make_all_fits <- function(df_models, df_BIC) {
+  model_names <- make_model_names( df_models$which_model %>% unique() )
+
+well_labs <- df_models$well
+names(well_labs) <- df_models$condition
+
+  df_BIC_p <- df_BIC  %>%
+    mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) 
+
+  df_models %>%
+      #pivot_longer(-c(well, Temperature_norm, which_model, component, BIC, condition), names_to = "which_value", values_to = "value") %>% #model_names$factor %>% names()
+    pivot_longer(-c(well, Temperature_norm, which_model, component, BIC), names_to = "which_value", values_to = "value") %>% #model_names$factor %>% names()
+      mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) %>%
+        filter(is.na(.$component) == FALSE ) %>%
+      ggplot() +
+      geom_line(aes(x = Temperature_norm, 
+                    y = value, 
+                    linetype = which_value, 
+                    color = component, 
+                    group = interaction(which_model, component, which_value)
+                    ), 
+                    alpha = 0.5) +
+      theme_void() +
+      geom_text(data = df_BIC_p, aes(label = paste0("BIC ", round(BIC, 0)),
+                                     x = 0.5,
+                                     y = 1.3,
+                                     group = well,
+                                     alpha = is_min),
+                                     size = 3) +
+      scale_alpha_manual(values = c(0.3, 1)) +
+      scale_color_manual(values = c("full_pred" = "#081d58", "initial_decay" = "red", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"))+
+      facet_grid(well~which_model_f,
+                  labeller = labeller(which_model_f = model_names$character))
+}
+
+make_all_fits(df_model_for_p %>% select(-condition), BIC_for_p)
+
+```
+
+
+
+```{r}
+# read the data in here
+s1_list <- readRDS("Exp0794_s1_model_list.rds")
+s2_list <- readRDS("Exp0794_s2_model_list.rds")
+s1_d_list <- readRDS("Exp0794_s1_d_model_list.rds")
+s2_d_list <- readRDS("Exp0794_s2_d_model_list.rds")
+
+df_models <- bind_rows(s1_list$df_models, 
+                       s2_list$df_models, 
+                       s1_d_list$df_models, 
+                       s2_d_list$df_models)
+
+df_BIC_models <- bind_rows(s1_list$df_BIC, 
+                       s2_list$df_BIC, 
+                       s1_d_list$df_BIC, 
+                       s2_d_list$df_BIC)
+
+df_tm_models <- bind_rows(s1_list$tm_tablemodels, 
+                       s2_list$tm_tablemodels, 
+                       s1_d_list$tm_tablemodels, 
+                       s2_d_list$tm_tablemodels)
+
+df_resid <- bind_rows(s1_list$model %>% mutate(which_model = "s1_pred"),
+                      s2_list$model %>% mutate(which_model = "s2_pred"),
+                      s1_d_list$model %>% mutate(which_model = "s1_d_pred"),
+                      s2_d_list$model %>% mutate(which_model = "s2_d_pred"))
+
+
+df_models <- rbind(  #s1 %>% unnest(predictions) %>% select( variable, Temperature_norm, value_norm ) %>% mutate(model = rep("raw_norm", nrow(.))), #%>% rename(s1_pred = pred)
+       extract_preds(s1, "s1_pred"),
+       extract_preds(s1_d, "s1_d_pred"),
+       extract_preds(s2, "s2_pred"),
+       extract_preds(s2_d, "s2_d_pred"),
+       build_s1_predictions(s1),
+       build_s1_d_predictions(s1_d),
+       build_s2_predictions(s2),
+       build_s2_d_predictions(s2_d))
+
+
+# df_all_fits <- df_models %>%
+#   ungroup() %>%
+#   group_by(well) %>%
+#   nest()%>%
+#   ungroup() %>%
+#   mutate(index = seq(from = 1, to  = 347, by = 1)) %>%
+#   unnest() %>%
+#   select(index, Temperature_norm, pred, value_norm, which_model, component)
+
+make_all_fits <- function(df_models, df_BIC, index_range) {
+  df_BIC_p <- df_BIC  %>%
+              dplyr::filter(index %in% index_range)
+  
+  df_models %>%
+      dplyr::filter(index %in% index_range) %>%
+      pivot_longer(-c(index, Temperature_norm, which_model, component, BIC), names_to = "which_value", values_to = "value") %>%
+    
+      ggplot() +
+      geom_line(aes(x = Temperature_norm, y = value, linetype = which_value, color = component, group = interaction(which_model, component, which_value)), alpha = 0.5) +
+      theme_void()+
+      geom_text(data = df_BIC_p, aes(label = paste0("BIC ", round(BIC, 0)),
+                                     x = 0.5,
+                                     y = 1.3,
+                                     group = index,
+                                     alpha = is_min),
+                                     size = 3) +
+      scale_alpha_manual(values = c(0.3, 1)) +
+      scale_color_manual(values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"))+
+      facet_grid(index~which_model) 
+}
+
+
+# test the plotting 
+df_fit_p <- df_all_fits %>%
+            select(index, Temperature_norm, pred, value_norm, which_model, component, BIC)
+p_3 <- make_all_fits(df_fit_p,  df_BIC_p, c(1:3)) 
+```
+
+```{r}
+df_models <- bind_rows(s1_list$df_models, 
+                       s2_list$df_models, 
+                       s1_d_list$df_models, 
+                       s2_d_list$df_models)
+
+df_all_fits <- df_models %>%
+  ungroup() %>%
+  group_by(well) %>%
+  nest() %>%
+  ungroup() %>%
+  #mutate(index = seq(from = 1, to  = 347, by = 1)) %>%
+  full_join(df_BIC_models) %>%
+  unnest() 
+
+df_fit_p <- df_all_fits %>%
+            select(index, Temperature_norm, pred, value_norm, which_model, component, BIC)
+
+df_plot <- readRDS("Exp0794--df_fit_p_datastructure_to_make_fit_plots.rds")
+df_BIC_plot <-readRDS("~/Box Sync/git/dsfworld6/scratch_work/Exp0794--df_BIC_p_datastructure_to_make_fit_plots.rds")
+make_all_fits(df_plot, df_BIC_plot, c(1))
+
+head(df_BIC_plot)
+head(df_plot)
+```
+
+
+```{r}
+model_all <- function(which_model, model_name, start_pars) {
+  
+  model_fit <- start_pars %>% fit_model_from_pars(which_model = which_model)
+  
+  df_BIC <- extract_model_element(model_fit, "glance", "BIC", model_name) # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+
+  # df_models <- rbind( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+  #                     build_predictions(model_name, model_fit) )
+  df_models <- bind_rows( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+                      build_predictions(model_name, model_fit) )
+  
+  tm_table_models <- get_Tms(model_fit, model_name) %>%  # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+                      pivot_wider(names_from = term, values_from = tma) %>%
+                      make_model_tm_table()
+  
+  out_list <- list("model" = model_fit, "df_BIC" = df_BIC, "df_models" = df_models, "tm_table_models" = tm_table_models)
+}
+
+# s3_BIC <- s3$glance
+extract_model_element <- function(model_df, info, sub_info, pred_name) {
+  model_df %>%
+    #select(variable, info)  %>%
+    select(well, info)  %>%
+    unnest_legacy() %>%
+    #select(variable, sub_info) %>%
+    select(well, sub_info) %>%
+    plyr::mutate(which_model = rep(pred_name, nrow(.))) 
+}
+
+extract_preds <- function( df, pred_name ) {
+  df %>% 
+    unnest_legacy(predictions) %>% 
+    #select( variable, Temperature, Temperature_norm, pred, value_norm ) %>% 
+    select( well, Temperature, Temperature_norm, pred, value_norm ) %>% 
+    #mutate(pred_model = rep(pred_name, nrow(.))) %>% #%>% rename(s1_pred = pred)
+    plyr::mutate(which_model = rep(pred_name, nrow(.))) %>% #%>% rename(s1_pred = pred)
+    plyr::mutate(component = rep("full_pred", nrow(.))) 
+}
+
+build_predictions <- function(model_name, df) {
+  if (model_name == "s1_pred")   { out <- build_s1_predictions(df)
+  } else if (model_name == "s1_d_pred") { out <- build_s1_d_predictions(df)
+  } else if (model_name == "s2_pred")   { out <- build_s2_predictions(df)
+  } else if (model_name == "s2_d_pred") { out <- build_s2_d_predictions(df) 
+  }
+  out
+}
+
+#values$s1_list <- model_all(s1_model, "s1_pred", values$start_pars)
+
+s1_list_shiny <- readRDS("values_s1_list.rds")
+
+s1_model_fit <- s1_list_shiny[[1]]
+
+
+df_BIC_shiny <- extract_model_element(s1_model_fit, "glance", "BIC", model_name) # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+
+  # df_models <- rbind( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+  #                     build_predictions(model_name, model_fit) )
+  df_models_shiny <- bind_rows( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+                      build_predictions(model_name, model_fit) )
+  
+  
+  ## where in extract_model_element and 
+  # extract_preds or build_predictions are we losing the condition/layout columns?
+```
+```{r}
+extract_preds <- function( df, pred_name ) {
+  df %>% 
+    unnest_legacy(predictions) %>% 
+    select( well, Temperature, Temperature_norm, pred, value_norm , condition) %>% 
+    plyr::mutate(which_model = rep(pred_name, nrow(.))) %>% 
+    plyr::mutate(component = rep("full_pred", nrow(.))) 
+}
+
+build_predictions <- function(model_name, df) {
+  if (model_name == "s1_pred")   { out <- build_s1_predictions(df)
+  } else if (model_name == "s1_d_pred") { out <- build_s1_d_predictions(df)
+  } else if (model_name == "s2_pred")   { out <- build_s2_predictions(df)
+  } else if (model_name == "s2_d_pred") { out <- build_s2_d_predictions(df) 
+  }
+  out %>%
+    select( well, Temperature, Temperature_norm, pred, value_norm , condition) 
+}
+
+  df_models_shiny <- bind_rows( extract_preds(s1_model_fit, "s1_pred"), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+                      build_predictions("s1_pred", s1_model_fit) )
+  
+  extract_preds(s1_model_fit, "s1_pred")
+  build_predictions("s1_pred", s1_model_fit)
+ df_models_shiny 
+```
+
+```{r}
+s1_model_fit
+
+
+
+extract_model_element <- function(model_df, info, sub_info, pred_name) {
+  model_df %>%
+    select(well, condition, info)  %>%
+    unnest_legacy() %>%
+    select(well, condition, sub_info) %>%
+    plyr::mutate(which_model = rep(pred_name, nrow(.))) 
+}
+
+extract_model_element2(s1_model_fit, "glance", "BIC", "s1_pred") 
+```
+
+
+
+
+
+
+
+
+
+```{r}
+
+# # plotting the fitted data
+# df_tm_models <- readRDS("../4_analyze/values_df_tm_models.rds")
+# df_models <- readRDS("../4_analyze/values_df_models.rds")
+# df_BIC_models <- readRDS("../4_analyze/values_df__BIC_models.rds")
+# 
+# plot_all_fits <- function(df_models, df_BIC, index_range) {
+#   df_BIC_p <- df_BIC  
+#   # %>%
+#   #             dplyr::filter(index %in% index_range)
+#   
+#   df_models %>%
+#       #dplyr::filter(index %in% index_range) %>%
+#       pivot_longer(-c(index, Temperature_norm, which_model, component, BIC), names_to = "which_value", values_to = "value") %>%
+#     
+#       ggplot() +
+#       geom_line(aes(x = Temperature_norm, y = value, linetype = which_value, color = component, group = interaction(which_model, component, which_value)), alpha = 0.5) +
+#       theme_void()+
+#       geom_text(data = df_BIC_p, aes(label = paste0("BIC ", round(BIC, 0)),
+#                                      x = 0.5,
+#                                      y = 1.3,
+#                                      group = index,
+#                                      alpha = is_min),
+#                                      size = 3) +
+#       scale_alpha_manual(values = c(0.3, 1)) +
+#       scale_color_manual(values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"))+
+#       facet_grid(index~which_model) 
+# }
+
+df_models %>%
+        ggplot() +
+      geom_line(aes(x = Temperature_norm, y = value_norm, color = component, group = interaction(which_model, component)), alpha = 0.5) +
+      theme_void()+
+      geom_text(data = df_BIC_models, aes(label = paste0("BIC ", round(BIC, 0)),
+                                     x = 0.5,
+                                     y = 1.3,
+                                     group = well,
+                                     alpha = is_min),
+                                     size = 3) +
+      scale_alpha_manual(values = c(0.3, 1)) +
+      scale_color_manual(values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"))+
+      facet_grid(well~which_model) 
+  
+# #df_BIC_models 
+# df_models %>%   
+#       #dplyr::filter(index %in% index_range) %>%
+#       pivot_longer(-c(well, Temperature_norm, which_model, component, BIC), names_to = "which_value", values_to = "value")
+```
+
+
 
 
 
