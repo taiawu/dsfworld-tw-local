@@ -262,9 +262,16 @@ df_final
 
 ```
 ```{r}
-head(mtcars) %>%
-  ggplot(aes(x = mpg, y = cyl)) +
-  geom_point()
+a <- head(mtcars) %>% select(c(disp, cyl))
+a
+
+b <- head(mtcars) %>%
+    select(c(disp, hp)) %>%
+    rename(disp_ = "disp")
+
+b
+
+left_join(b, a, by = c("disp_" = "disp"))
 ```
 
 

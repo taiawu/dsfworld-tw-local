@@ -418,8 +418,6 @@ handle_fits <- function( df_fit) {
       predictions = purrr::map2(data, model, add_predictions), # model is the column we created earlier, not the actual model itself
       glance = purrr::map(model, broom::glance)
     ) 
-  
-  
 }
 
 # implement models
@@ -460,9 +458,11 @@ get_start_pars <- function(by_variable) {
 
 fit_model_from_pars <- function(by_variable, which_model) { #### THIS NEEDS TO GET by_variable AFTER THE START PARS HAVE BEEN GENERATED.....  this should have a different name; be a different object?
   by_variable <-   by_variable %>%
-    mutate(model = purrr::map2(data, peaks, which_model)) %>%
-    dplyr::filter(is.na(model) == FALSE) %>%
-    handle_fits()
+                    mutate(model = purrr::map2(data, peaks, which_model)) %>%
+                    dplyr::filter(is.na(model) == FALSE) %>% # retain only rows which 
+                    handle_fits()
+  
+  by_variable
 }
 
 # build individual component predictions from the models
@@ -721,8 +721,8 @@ get_Tms <- function(model_df, model) {
     mutate( tma = map(estimate, n2r) %>% 
               as_vector() %>%
               round( digits = 1) ) %>%
-    
-    select(well, term, tma) %>%
+    select(well, condition, term, tma) %>% # 20200310
+    #select(well,  term, tma) %>%
     plyr::mutate(which_model = rep(model, nrow(.)))
   #pivot_wider(names_from = term, values_from = tma)
 }
@@ -768,15 +768,15 @@ model_all <- function(which_model, model_name, start_pars) {
   model_fit <- start_pars %>% fit_model_from_pars(which_model = which_model)
   
   df_BIC <- extract_model_element(model_fit, "glance", "BIC", model_name) # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
-  
+
   # df_models <- rbind( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
   #                     build_predictions(model_name, model_fit) )
   df_models <- bind_rows( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
                       build_predictions(model_name, model_fit) )
   
   tm_table_models <- get_Tms(model_fit, model_name) %>%  # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
-    pivot_wider(names_from = term, values_from = tma) %>%
-    make_model_tm_table()
+                      pivot_wider(names_from = term, values_from = tma) %>%
+                      make_model_tm_table()
   
   out_list <- list("model" = model_fit, "df_BIC" = df_BIC, "df_models" = df_models, "tm_table_models" = tm_table_models)
 }
