@@ -22,7 +22,8 @@ library(shiny) # for shiny web-apps
 named_mods <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") %>%
     set_names("Model 1", "Model 2", "Model 3", "Model 4")
 
-ui <- navbarPage("",
+ui <- navbarPage( useShinyalert(),
+                
                  #tabPanel(p("to data analysis", style = "font-family: 'Avenir Next'; font-size: 20px; color: grey",align = "right")),
                  # Data Analysis --------------------------------------------------------------------------------
                  tabPanel(p("to data analysis", style = "font-family: 'Avenir Next'; font-size: 20px; color: grey",align = "center"), value = "data_analysis_mother", # end tab panel (tabset, div, main still remaining)
@@ -138,11 +139,7 @@ ui <- navbarPage("",
                                                                                                   bsCollapsePanel(p("Improve fits", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                                   p("Fit data only in the following temperature range", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),
                                                                                                            
-                                                                                                                  uiOutput("trim_ends"),
-                                                                                                                  p("Update initial model  guesses", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),
-                                                                                                                  p("To fit models to data, DSFworld begins by guessing initial values for model parameters, and then improves upon them until the fit is optimized. If fits have failed, or describe the data poorly, manually defining more accurate starting guesses for the Tm' below can help.", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                                 
-                                                                                                                  uiOutput("update_fits_button")
+                                                                                                                  uiOutput("trim_ends")
                                                                                                   ),
                                                                                                   bsCollapsePanel(p("Select the best model for each condition", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                                   p("Click 'Plot model comparision' below to display the four models side-by-side. Use this plot to select the best model for each condition. ", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
@@ -205,7 +202,6 @@ server <- function(session, input, output) {
     values$df <- readRDS("values_df_with_layout.rds")
     values$df_1 <- readRDS("values_df_with_layout.rds")
     
-    #values$df_fit <- readRDS("values_df_with_layout.rds")
     values$plot_chosen <- "initial"
     
 # data layout and handling server --------------------------- 
@@ -328,7 +324,6 @@ server <- function(session, input, output) {
     options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr')) #scroller = TRUE, dom = 'tr'
 
     # ## by model fitting
-    
     # set initial values for smoothing and normalizing
     observeEvent(values$df_fit, { # data_raw(), { ### CHANGE THIS BACK TO data_raw() for integration!!!!!!!!!
         tryCatch({ # REVISIT-- should this be called on data_raw() for any reason?
@@ -363,30 +358,12 @@ server <- function(session, input, output) {
         values$df_models <- values$s1_list$df_models
         values$df_BIC_models <- values$s1_list$df_BIC
         values$df_tm_models <- values$s1_list$tm_table_models
-
-        values$cond_layout <- values$df_fit %>% 
-                                dplyr::select(c(well_, condition)) ## REVISIT--this will be layout(), not values$df in the merged app
-        
-        print("cond_layout")
-        print(values$cond_layout)
-       # print(names(values$df))
         
         values$df_tm_models_table <- values$df_tm_models %>%
                         dplyr::filter( which_model == "s1_pred"  ) %>%
                         plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
             set_names(c("Condition", "Model", "Tma 1", "Tma 1 SD", "Tma 2", "Tma 2 SD")) %>%          
             discard(~all(is.na(.x))) #%>% # get rid of the columns which are all NA (true if the model is not selected)
-                        # left_join(. , values$cond_layout, by = c("well" = "well_")) %>%
-                        # select(condition, everything())
-            # set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
-             # %>%
-            # group_by(condition)  %>%
-            # summarise( mean_tm = mean(dRFU_tma) ,
-            #            sd_tm = sd(dRFU_tma)) %>%
-            # mutate_if(is.numeric, round, 2)
-        #well  which_model mean_xmid1 sd_xmid1 mean_xmid2 sd_xmid2
-        print("values$df_tm_models_table")
-        print(values$df_tm_models_table)
         
         # if new data is uploaded, reset all of the buttons as well. perhaps we should set these to watch values$data (unnamed), so it doesn't get over-written by renaming, but i'd need to think more carefully about how to incorporate the names downstream....
         updateButton(session, "s1",  value = TRUE)
@@ -439,36 +416,12 @@ server <- function(session, input, output) {
             #update the tm table for display df_tm_models_table <- df_tm_models %>%
             model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")# doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
             model_name_true <- reactive(model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)])
-            # print(model_name_true )
-            
-            print("values$df_tm_models")
-            print(values$df_tm_models)
-            print("values$start_pars")
-            print(values$start_pars)
-            
-            # values$df_tm_models_table <- values$df_tm_models %>%
-            #                                 dplyr::filter( which_model %in% model_name_true()  ) %>%
-            #                                 plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
-            #                                 #set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
-            #                                 discard(~all(is.na(.x)))
-            
+           
             values$df_tm_models_table <- values$df_tm_models %>%
                 dplyr::filter( which_model %in% model_name_true()  ) %>%
                 plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
                 set_names(c("Condition", "Model", "Tma 1", "Tma 1 SD", "Tma 2", "Tma 2 SD")) %>%
                 discard(~all(is.na(.x)))
-            
-            # values$df_tm_models_table <- values$df_tm_models %>%
-            #     dplyr::filter( which_model == "s1_pred"  ) %>%
-            #     plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
-            #     set_names(c("well", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%            
-            #     discard(~all(is.na(.x))) 
-            # %>% # get rid of the columns which are all NA (true if the model is not selected)
-            #     left_join(. , values$cond_layout, by = c("well" = "well_")) %>%
-            #     select(condition, everything())
-            
-            print("values$df_tm_models_table")
-            print(values$df_tm_models_table)
             
             # update which models are available for plotting
             mods_available <- named_mods[c(input$s1, input$s1_d, input$s2, input$s2_d)] # the original named_mods is created outside the server
@@ -476,17 +429,32 @@ server <- function(session, input, output) {
                                choices = mods_available,
                                selected = mods_available[1]
             )
-            
         })
     
-    output$trim_ends <-renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
+    output$trim_ends <- renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
         req(values$df)
-        sliderInput("trim_ends", "", min = min(unnest(values$df)$Temperature), max = max(unnest(values$df)$Temperature), 
-                    value = c(min(unnest(values$df)$Temperature),max(unnest(values$df)$Temperature)), 
-                    #value = c(min(values$df$Temperature)), 
+        sliderInput("trim_ends", "", min = min(unnest(values$df)$Temperature), max = max(unnest(values$df)$Temperature),
+                    value = c(min(unnest(values$df)$Temperature),
+                              max(unnest(values$df)$Temperature)),
                     step = 1)
     }) # trim the ends off of the data to improve fitting
-
+    
+    observeEvent(input$trim_ends, {print("input$trim_ends")
+        print(input$trim_ends)
+        print(str(input$trim_ends))
+        
+        if ( (input$trim_ends[2] - input$trim_ends[1]) < 25 ) {
+            updateSliderInput(session, "trim_ends", 
+                              
+                              value = c(min(unnest(values$df)$Temperature),
+                                        max(unnest(values$df)$Temperature)),
+                              step =  1)
+            shinyalert("Not enough data points remaining", "Please increase range to at least 25 measurements")
+        } else {
+            values$df_fit <- values$df %>%
+                mutate(data = map(data, ~ filter(., Temperature %>% between(input$trim_ends[1], input$trim_ends[2])))) 
+        }
+        })
 } # end server
 # Run the application 
 shinyApp(ui = ui, server = server)

@@ -271,7 +271,9 @@ b <- head(mtcars) %>%
 
 b
 
-left_join(b, a, by = c("disp_" = "disp"))
+df_c <- left_join(b, a, by = c("disp_" = "disp"))
+
+df_c %>% filter(., between(hp, 80, 150))
 ```
 
 
