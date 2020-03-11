@@ -1,5 +1,12 @@
 # 4_analyze/app.R
-# 3_plotting/app.R
+library(quantmod) # contains the findValleys function, which maybe we should just extract and put verbatim in a source file instead of loading this whole thing...?
+library(minpack.lm) # contains the nlsLM function, which we use for our fitting
+library(modelr) # used in both the data modeling and the analysis model fitting 
+library(SciViews) # contains the ln function used in the data modeling
+library(signal) # contains the savistky golay filter (savgolfilt), used to generate the first derivative data in both data modeling and analysis model fitting  
+named_mods <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") %>%
+    set_names("Model 1", "Model 2", "Model 3", "Model 4")
+
 library(shinyBS) # drop-down panels
 library(tidyverse) #  handling data structures and plotting
 
@@ -442,30 +449,8 @@ server <- function(session, input, output) {
     ) 
     
 # tm determination server  ---------------------------  
-    observeEvent(values$df, { # data_raw(), { ### CHANGE THIS BACK TO data_raw() for integration!!!!!!!!!
-        data_raw <- reactive({read_csv("sample_file.csv")}) #### delete this for integration
-        # values$data_raw <- data_raw() # uncomment this for integration!!!!!
-        print("setting win3d etc")
-        # set the following values based on the data
 
-        tryCatch({
-            low_T <- isolate( data_raw()$Temperature %>% min() )
-            high_T <- isolate( data_raw()$Temperature %>% max() )
-            n_meas <- isolate( data_raw() %>% nrow() )
-            
-            n2r <<- make_temp_n2r(range(low_T:high_T)) #make_temp_n2r(range(values$data$Temperature)) # an example of how this could be used
-            win3d <<- floor(3/((n2r(1) - n2r(0))/n_meas))
-            if ( win3d < 5 ) { win3d <<- 5 }
-            
-            sgfilt_nest <<- sgfilt_set_n(n_ = find_sgolay_width( win3d ))
-        },   
-        error = function(e){
-            print("win3 errored! setting win3d to 7")
-            win3d <<- 7
-            sgfilt_nest <<- sgfilt_set_n( n_ = find_sgolay_width( 7 ) )
-        })
-    }) # write to values
-    
+    ## by tma
     observeEvent( values$df, {
         # starting from values$df gives this calculation a fresh slate should the user re-format their data multiple times
         values$df_tms <- values$df %>% #df_int %>% # add the first derivative Tms
@@ -503,6 +488,228 @@ server <- function(session, input, output) {
         df 
     },
     options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr')) #scroller = TRUE, dom = 'tr'
+
+    
+    # ## by model fitting
+    # observeEvent( { input$s1
+    #     input$s1_d
+    #     input$s2
+    #     input$s2_d }, {
+    #         
+    #         req(values$df_models)
+    #         
+    #         #### fit any newly requested models
+    #         if (input$s1_d == TRUE) { # if the button for a model is clicked
+    #             if ("s1_d_pred" %in% values$df_models$which_model == FALSE) { # if it hasn't already been fit, then fit it and append the values to the summary tibbles
+    #                 values$s1_d_list <- model_all(s1_d_model, "s1_d_pred", values$start_pars)
+    #                 values$df_models <- values$df_models %>% bind_rows(values$s1_d_list$df_models)
+    #                 values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s1_d_list$df_BIC)
+    #                 values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s1_d_list$tm_table_models)
+    #             }}
+    #         
+    #         if (input$s2 == TRUE) {
+    #             if ("s2_pred" %in% values$df_models$which_model == FALSE) {
+    #                 values$s2_list <- model_all(s2_model, "s2_pred", values$start_pars)
+    #                 values$df_models <- values$df_models %>% bind_rows(values$s2_list$df_models)
+    #                 values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_list$df_BIC)
+    #                 values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_list$tm_table_models)
+    #                 
+    #             }}
+    #         
+    #         if (input$s2_d == TRUE) {
+    #             if ("s2_d_pred" %in% values$df_models$which_model == FALSE) {
+    #                 values$s2_d_list <- model_all(s2_d_model, "s2_d_pred", values$start_pars)
+    #                 values$df_models <- values$df_models %>% bind_rows(values$s2_d_list$df_models)
+    #                 values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_d_list$df_BIC)
+    #                 values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_d_list$tm_table_models)
+    #             }}
+    #         
+    #         ### update the tm table for display df_tm_models_table <- df_tm_models %>%
+    #         model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")# doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
+    #         model_name_true <- reactive(model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)])
+    #         # print(model_name_true )
+    #         
+    #         values$df_tm_models_table <- values$df_tm_models %>%
+    #             dplyr::filter( which_model %in% model_name_true()  ) %>%
+    #             plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
+    #             set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
+    #             discard(~all(is.na(.x)))
+    #         
+    #         # update which models are available for plotting
+    #         mods_available <- named_mods[c(input$s1, input$s1_d, input$s2, input$s2_d)] # the original named_mods is created outside the server
+    #         updateRadioButtons(session, "choose_model_tm",
+    #                            choices = mods_available,
+    #                            selected = mods_available[1]
+    #         )
+    #         
+    #     })
+    # 
+    # observeEvent(values$df, {
+    #     print("entering the modeling ring")
+    #     win3d <<- 7#floor(3/((n2r(1) - n2r(0))/n_meas))
+    #     
+    #     peak_finder_nest <<- make_peak_finder_nest(win3d) ###### brute forced, notice!!!
+    #     
+    #     values$start_pars <- get_start_pars(values$df)
+    #     
+    #     
+    #     # first, fit the s1 model
+    #     # this will over-write the summary dataframes, re-setting the models to follow
+    #     values$s1_list <- model_all(s1_model, "s1_pred", values$start_pars) # Warning: Error in rbind: numbers of columns of arguments do not match
+    #     print(values$s1_list)
+    #     values$df_models <- values$s1_list$df_models
+    #     values$df_BIC_models <- values$s1_list$df_BIC
+    #     values$df_tm_models <- values$s1_list$tm_table_models
+    #     # head(values$df_tm_models)
+    #     #
+    #     values$df_tm_models_table <- values$df_tm_models %>%
+    #         dplyr::filter( which_model == "s1_pred"  ) %>%
+    #         plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
+    #         set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
+    #         discard(~all(is.na(.x)))
+    # 
+    #     # if new data is uploaded, reset all of the buttons as well. perhaps we should set these to watch values$data (unnamed), so it doesn't get over-written by renaming, but i'd need to think more carefully about how to incorporate the names downstream....
+    #     updateButton(session, "s1",  value = TRUE)
+    #     updateButton(session, "s1_d",  value = FALSE)
+    #     updateButton(session, "s2",  value = FALSE)
+    #     updateButton(session, "s2_d",  value = FALSE)
+    #     
+    # })
+    
+    
+    ### straight from the old app
+    #sigmoid fitting
+    #############
+    ##### for all models, draw from these starting parameters
+    
+    # the first things that happen, as soon as the data is uploaded. We may want to wait to trigger this until the sigmoid fitting section is opened, in case doing it this way interferes with the initial plotting, even if no fits are desired
+    
+    # the following happen automatically, and without user request
+ 
+    
+    observeEvent(values$df, { # data_raw(), { ### CHANGE THIS BACK TO data_raw() for integration!!!!!!!!!
+        
+        tryCatch({
+            low_T <-  values$df %>% unnest() %>% .$Temperature %>% min() 
+            high_T <- values$df %>% unnest() %>% .$Temperature %>% max() 
+            n_meas <- values$df %>% unnest() %>% .$Temperature %>% unique() %>% length() 
+            
+            ### alternative 
+            # low_T <- isolate( data_raw()$Temperature %>% min() )
+            # high_T <- isolate( data_raw()$Temperature %>% max() )
+            # n_meas <- isolate( data_raw() %>% nrow() )
+            
+            n2r <<- make_temp_n2r(range(low_T:high_T)) #make_temp_n2r(range(values$data$Temperature)) # an example of how this could be used
+            win3d <<- floor(3/((n2r(1) - n2r(0))/n_meas))
+            if ( win3d < 5 ) { win3d <<- 5 }
+            
+            sgfilt_nest <<- sgfilt_set_n(n_ = find_sgolay_width( win3d ))
+        },   
+        error = function(e) {
+            print("win3 errored! setting win3d to 7")
+            n2r <<- make_temp_n2r(range(25:95)) ### this is a vulnerable thing to hard-code in~~
+            #n2r <<- make_temp_n2r(range(low_T:high_T)) #make_temp_n2r(range(values$data$Temperature)) # an example of how this could be used
+            win3d <<- 7
+            sgfilt_nest <<- sgfilt_set_n( n_ = find_sgolay_width( 7 ) )
+        })
+    }) # write to values
+    
+    
+    observeEvent(values$df, {
+        # print("entering the modeling ring")
+        # win3d <<- 7#floor(3/((n2r(1) - n2r(0))/n_meas))
+        # 
+        # peak_finder_nest <<- make_peak_finder_nest(win3d) ###### brute forced, notice!!!
+        
+        values$start_pars <- get_start_pars(values$df)
+        print("values$start_pars")
+        print(values$start_pars)
+        
+        # first, fit the s1 model
+        # this will over-write the summary dataframes, re-setting the models to follow
+        values$s1_list <- model_all(s1_model, "s1_pred", values$start_pars)
+        # #print(values$s1_list)
+        values$df_models <- values$s1_list$df_models
+        values$df_BIC_models <- values$s1_list$df_BIC
+        values$df_tm_models <- values$s1_list$tm_table_models
+        # head(values$df_tm_models)
+        #
+        values$df_tm_models_table <- values$df_tm_models %>%
+            dplyr::filter( which_model == "s1_pred"  ) %>%
+            plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
+            set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
+            discard(~all(is.na(.x)))
+        
+        # if new data is uploaded, reset all of the buttons as well. perhaps we should set these to watch values$data (unnamed), so it doesn't get over-written by renaming, but i'd need to think more carefully about how to incorporate the names downstream....
+        updateButton(session, "s1",  value = TRUE)
+        updateButton(session, "s1_d",  value = FALSE)
+        updateButton(session, "s2",  value = FALSE)
+        updateButton(session, "s2_d",  value = FALSE)
+        
+    })
+    
+    output$tm_table_render_models <- DT::renderDataTable({ ### new for models
+        req(values$df_tm_models_table)
+        values$df_tm_models_table
+    },
+    options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
+    
+    observeEvent( { input$s1
+        input$s1_d
+        input$s2
+        input$s2_d }, {
+            
+            req(values$df_models)
+            
+            #### fit any newly requested models
+            if (input$s1_d == TRUE) { # if the button for a model is clicked
+                if ("s1_d_pred" %in% values$df_models$which_model == FALSE) { # if it hasn't already been fit, then fit it and append the values to the summary tibbles
+                    values$s1_d_list <- model_all(s1_d_model, "s1_d_pred", values$start_pars)
+                    values$df_models <- values$df_models %>% bind_rows(values$s1_d_list$df_models)
+                    values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s1_d_list$df_BIC)
+                    values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s1_d_list$tm_table_models)
+                }}
+            
+            if (input$s2 == TRUE) {
+                if ("s2_pred" %in% values$df_models$which_model == FALSE) {
+                    values$s2_list <- model_all(s2_model, "s2_pred", values$start_pars)
+                    values$df_models <- values$df_models %>% bind_rows(values$s2_list$df_models)
+                    values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_list$df_BIC)
+                    values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_list$tm_table_models)
+                    
+                }}
+            
+            if (input$s2_d == TRUE) {
+                if ("s2_d_pred" %in% values$df_models$which_model == FALSE) {
+                    values$s2_d_list <- model_all(s2_d_model, "s2_d_pred", values$start_pars)
+                    values$df_models <- values$df_models %>% bind_rows(values$s2_d_list$df_models)
+                    values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_d_list$df_BIC)
+                    values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_d_list$tm_table_models)
+                }}
+            
+            ### update the tm table for display df_tm_models_table <- df_tm_models %>%
+            model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")# doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
+            model_name_true <- reactive(model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)])
+            # print(model_name_true )
+            
+            values$df_tm_models_table <- values$df_tm_models %>%
+                dplyr::filter( which_model %in% model_name_true()  ) %>%
+                plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
+                set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
+                discard(~all(is.na(.x)))
+            
+            # update which models are available for plotting
+            mods_available <- named_mods[c(input$s1, input$s1_d, input$s2, input$s2_d)] # the original named_mods is created outside the server
+            updateRadioButtons(session, "choose_model_tm",
+                               choices = mods_available,
+                               selected = mods_available[1]
+            )
+            
+        })
+    
+    
+    
+    
     
     
 } # end server

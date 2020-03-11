@@ -769,7 +769,9 @@ model_all <- function(which_model, model_name, start_pars) {
   
   df_BIC <- extract_model_element(model_fit, "glance", "BIC", model_name) # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
   
-  df_models <- rbind( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+  # df_models <- rbind( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+  #                     build_predictions(model_name, model_fit) )
+  df_models <- bind_rows( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
                       build_predictions(model_name, model_fit) )
   
   tm_table_models <- get_Tms(model_fit, model_name) %>%  # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
