@@ -961,26 +961,26 @@ facet_func2 <- function(df,
 }
 
 
-#### plot the models
-plot_all_fits <- function(df_models, df_BIC, index_range) {
-  df_BIC_p <- df_BIC  
-  # %>%
-  #             dplyr::filter(index %in% index_range)
-  
-  df_models %>%
-    #dplyr::filter(index %in% index_range) %>%
-    pivot_longer(-c(index, Temperature_norm, which_model, component, BIC), names_to = "which_value", values_to = "value") %>%
-    
-    ggplot() +
-    geom_line(aes(x = Temperature_norm, y = value, linetype = which_value, color = component, group = interaction(which_model, component, which_value)), alpha = 0.5) +
-    theme_void()+
-    geom_text(data = df_BIC_p, aes(label = paste0("BIC ", round(BIC, 0)),
-                                   x = 0.5,
-                                   y = 1.3,
-                                   group = index,
-                                   alpha = is_min),
-              size = 3) +
-    scale_alpha_manual(values = c(0.3, 1)) +
-    scale_color_manual(values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"))+
-    facet_grid(index~which_model) 
-}
+# #### plot the models
+# plot_all_fits <- function(df_models, df_BIC, index_range) {
+#   df_BIC_p <- df_BIC  
+#   # %>%
+#   #             dplyr::filter(index %in% index_range)
+#   
+#   df_models %>%
+#     #dplyr::filter(index %in% index_range) %>%
+#     pivot_longer(-c(index, Temperature_norm, which_model, component, BIC), names_to = "which_value", values_to = "value") %>%
+#     
+#     ggplot() +
+#     geom_line(aes(x = Temperature_norm, y = value, linetype = which_value, color = component, group = interaction(which_model, component, which_value)), alpha = 0.5) +
+#     theme_void()+
+#     geom_text(data = df_BIC_p, aes(label = paste0("BIC ", round(BIC, 0)),
+#                                    x = 0.5,
+#                                    y = 1.3,
+#                                    group = index,
+#                                    alpha = is_min),
+#               size = 3) +
+#     scale_alpha_manual(values = c(0.3, 1)) +
+#     scale_color_manual(values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"))+
+#     facet_grid(index~which_model) 
+# }

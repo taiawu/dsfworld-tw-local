@@ -278,37 +278,6 @@ df_c %>% filter(., between(hp, 80, 150))
 
 # making the model plots
 ```{r}
-## a fully working example from exp0794
-make_all_fits_794 <- function(df_models, df_BIC, index_range) {
-  df_BIC_p <- df_BIC  %>%
-              dplyr::filter(index %in% index_range)
-  
-  df_models %>%
-      dplyr::filter(index %in% index_range) %>%
-      pivot_longer(-c(index, Temperature_norm, which_model, component, BIC), names_to = "which_value", values_to = "value") %>%
-    
-      ggplot() +
-      geom_line(aes(x = Temperature_norm, y = value, linetype = which_value, color = component, group = interaction(which_model, component, which_value)), alpha = 0.5) +
-      theme_void()+
-      geom_text(data = df_BIC_p, aes(label = paste0("BIC ", round(BIC, 0)),
-                                     x = 0.5,
-                                     y = 1.3,
-                                     group = index,
-                                     alpha = is_min),
-                                     size = 3) +
-      scale_alpha_manual(values = c(0.3, 1)) +
-      scale_color_manual(values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"))+
-      facet_grid(index~which_model) 
-}
-
-exp0794_df_p <- readRDS("Exp0794--df_fit_p_datastructure_to_make_fit_plots.rds")
-exp0795_df_bic <-readRDS("~/Box Sync/git/dsfworld6/scratch_work/Exp0794--df_BIC_p_datastructure_to_make_fit_plots.rds")
-
-make_all_fits_794(exp0794_df_p , exp0795_df_bic, c(1:2))
-```
-
-
-```{r}
 # this code to be added to plotting.R
 cond_df_model_for_plot <- function( model_df, df_BIC ) {
   model_df %>%
@@ -359,18 +328,8 @@ match_well_to_cond <- function( df_models ) {
   names(wells) <- df$well
   wells
 }
- 
-   
-
-# # wexported directly from dsfworld
-# df_models_shiny <- readRDS("../4_analyze/values_df_models.rds")
-# df_BIC_models_shiny <- readRDS("../4_analyze/values_df__BIC_models.rds")
-# s1_list_shiny <- readRDS("../4_analyze/values_s1_list.rds")
-
-df_mod_test <- cond_df_model_for_plot(df_models_shiny, df_BIC_models_shiny )
-df_mod_bic_test <- cond_df_BIC_for_plot ( df_BIC_models_shiny )
 ```
-
+plotting functions
 ```{r}
 dsfworld_default_model <- theme( # adapted from free amino acids hit call
   text = element_text(size = 10*1.25),
@@ -385,10 +344,156 @@ dsfworld_default_model <- theme( # adapted from free amino acids hit call
   aspect.ratio = (1/1.618)
 )
 
-plot_all_fits_shiny <- function(df_models_in, df_BIC_in) {
-  df_models <- cond_df_model_for_plot(df_models_in, df_BIC_in )
-  df_BIC <- cond_df_BIC_for_plot ( df_BIC_in )
 
+plot_all_fits_shiny <- function(df_models, df_BIC) { # takes pre-conditioned dataframes 
+  
+  # create vectors used to label and position data within the plots
+  model_names <- make_model_names( df_models$which_model %>% unique() )
+  well_names <- match_well_to_cond( df_mod_test )
+  mid_temp <- (max(df_models$Temperature) - min(df_models$Temperature))/2 + min(df_models$Temperature)
+  
+  
+  # create the plot
+  df_models %>%
+    ggplot() +
+    geom_line (aes(x = Temperature, # RFU data, fitted and "real"
+                   y = value, 
+                   linetype = which_value, 
+                   color = component, 
+                   group = interaction(which_model, component, which_value)
+    ), 
+    
+    alpha = 0.5) +
+    geom_text (data = df_BIC, aes(label = paste0("BIC ", round(BIC, 0)), # BIC values for fits
+                                  x = mid_temp,
+                                  y = 1.3,
+                                  group = well,
+                                  alpha = is_min),
+               size = 3) +
+    facet_grid (well~which_model_f,
+                labeller = labeller(well = well_names,
+                                    which_model_f = model_names$character)
+    ) +
+    
+    scale_alpha_manual (values = c(0.7, 1), guide = FALSE) +
+    scale_linetype_manual (values = c("pred" = "solid", "value_norm" = "dashed"),
+                           name="",
+                           breaks=c( "value_norm", "pred"),
+                           labels=c("Data", "Fits")
+    ) +
+    scale_color_manual (values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"),
+                        name="Fit component",
+                        breaks=c("full_pred", "sigmoid_1", "sigmoid_2", "initial_decay"),
+                        labels=c("Final fit", "Sigmoid 1", "Sigmoid 2", "Initial RFU")
+    ) +
+    guides  (linetype = guide_legend(order = 1),
+             color = guide_legend(order = 2))+
+    
+    ylim (c(0, 1.4))+
+    theme_bw() +
+    dsfworld_default_model +
+    labs (x = "Temperature (ºC)", y = "Normalized RFU")
+}
+
+plot_best_fits_shiny2 <- function(df_models, df_BIC_best) {
+  # create vectors used to label and position data within the plots
+   well_names <- match_well_to_cond( df_models )
+   mid_temp <- (max(df_models$Temperature) - min(df_models$Temperature))/2 + min(df_models$Temperature)
+
+ df_mods_BIC <- df_models %>% 
+                full_join(df_BIC_best) %>%
+                dplyr::filter(which_model == best_model) 
+
+df_BIC_best <- df_BIC_best %>%
+                mutate(which_model = best_model, 
+                       best_model = recode(which_model,
+                                      s1_pred = "Fit 1", 
+                                      s1_d_pred = "Fit 2",
+                                      s2_pred = "Fit 3",
+                                      s2_d_pred = "Fit 4"))
+
+df_mods_BIC %>%
+   ggplot() +
+        geom_line (aes(x = Temperature, # RFU data, fitted and "real"
+                      y = value, 
+                      linetype = which_value, 
+                      color = component, 
+                      group = interaction(which_model, component, which_value)
+                      ), 
+                     alpha = 0.5) +
+          geom_text (data = df_BIC_best, 
+                     aes(label = paste0("Selected: ", best_model), # BIC values for fits
+                                         x = 50,
+                                         y = 1.3,
+                                         group = well),
+                                         size = 3) +
+          facet_wrap(~well,  #, 
+                      labeller = labeller(well = well_names)
+                      ) +
+        
+       # scale_alpha_manual (values = c(0.7, 1), guide = FALSE) +
+        scale_linetype_manual (values = c("pred" = "solid", "value_norm" = "dashed"),
+                                name="",
+                                breaks=c( "value_norm", "pred"),
+                                labels=c("Data", "Fits")
+                                ) +
+        scale_color_manual (values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"),
+                                name="Fit component",
+                                breaks=c("full_pred", "sigmoid_1", "sigmoid_2", "initial_decay"),
+                                labels=c("Final fit", "Sigmoid 1", "Sigmoid 2", "Initial RFU")
+                                ) +
+        guides  (linetype = guide_legend(order = 1),
+                 color = guide_legend(order = 2))+
+        
+        ylim (c(0, 1.4))+
+        theme_bw() +
+        dsfworld_default_model +
+        labs (x = "Temperature (ºC)", y = "Normalized RFU")
+}
+
+
+
+```
+
+use of the plotting functions
+```{r}
+# exported directly from dsfworld
+df_models_shiny <- readRDS("../4_analyze/values_df_models.rds")
+df_BIC_models_shiny <- readRDS("../4_analyze/values_df__BIC_models.rds")
+s1_list_shiny <- readRDS("../4_analyze/values_s1_list.rds")
+
+
+
+# df_BIC_best
+# 
+# df_mods_BIC2 <- df_models_p %>% 
+#                 full_join(df_BIC_best)
+# df_mods_BIC2 %>%
+#   dplyr::filter(which_model == best_model)
+# df_mods_BIC2
+
+# df_models_p <- cond_df_model_for_plot(df_models_shiny, df_BIC_models_shiny )
+# df_BIC_p <- cond_df_BIC_for_plot ( df_BIC_models_shiny )
+
+
+df_models_p <- cond_df_model_for_plot(df_models_shiny, df_BIC_models_shiny )
+df_models_bic_p <- cond_df_BIC_for_plot ( df_BIC_models_shiny )
+
+df_BIC_best <- df_models_bic_p %>% #readRDS("../4_analyze/values_df__BIC_models.rds") %>%  # how the best BIC would be exported 
+                cond_df_BIC_for_plot() %>%
+                filter(is_min == TRUE) %>% 
+                select(c(well, condition, which_model)) %>%
+                set_names(c("well", "condition", "best_model"))
+
+plot_all_fits_shiny(df_models_p, df_models_bic_p)
+plot_best_fits_shiny2(df_models_p, df_BIC_best)
+```
+
+
+```{r}
+plot_all_fits_shiny <- function(df_models, df_BIC) { # takes pre-conditioned dataframes 
+  # df_models <- cond_df_model_for_plot(df_models_in, df_BIC_in )
+  # df_BIC <- cond_df_BIC_for_plot ( df_BIC_in )
   # create vectors used to label and position data within the plots
    model_names <- make_model_names( df_models$which_model %>% unique() )
    well_names <- match_well_to_cond( df_mod_test )
@@ -437,20 +542,16 @@ plot_all_fits_shiny <- function(df_models_in, df_BIC_in) {
         labs (x = "Temperature (ºC)", y = "Normalized RFU")
 }
 
+
+
+
 df_models_shiny <- readRDS("../4_analyze/values_df_models.rds")
 df_BIC_models_shiny <- readRDS("../4_analyze/values_df__BIC_models.rds")
 
 plot_all_fits_shiny(df_models_shiny, df_BIC_models_shiny)
 ```
 
-```{r}
-char_vec
-char_vec <- sample(c("a", "b", "c"), 10, replace = TRUE)
-recode(char_vec, a = "Apple")
-#>  [1] "Apple" "b"     "Apple" "b"     "c"     "Apple" "c"     "c"     "b"    
-#> [10] "Apple"
-recode(char_vec, a = "Apple", b = "Banana")
-```
+
 ```{r}
 df_BIC_best <- readRDS("../4_analyze/values_df__BIC_models.rds") %>% 
                 cond_df_BIC_for_plot() %>%
@@ -671,7 +772,6 @@ plot_best_fits_shiny(df_models_p, df_BIC_p)
 ```{r}
 plot_best_fits_shiny2 <- function(df_models, df_BIC_best) {
   # create vectors used to label and position data within the plots
-   #model_names <- make_model_names( df_models$which_model %>% unique() )
    well_names <- match_well_to_cond( df_models )
    mid_temp <- (max(df_models$Temperature) - min(df_models$Temperature))/2 + min(df_models$Temperature)
 
@@ -688,7 +788,6 @@ df_BIC_best <- df_BIC_best %>%
                                       s2_d_pred = "Fit 4"))
 
 df_mods_BIC %>%
-  #dplyr::filter(is_min == TRUE) %>%
    ggplot() +
         geom_line (aes(x = Temperature, # RFU data, fitted and "real"
                       y = value, 
