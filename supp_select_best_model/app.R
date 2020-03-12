@@ -10,8 +10,6 @@ library(shinycssloaders) # spinning plot loading icon
 library(rhandsontable) # user-interactive tables 
 library(shiny) # for shiny web-apps 
 
-
-
 ui <- navbarPage("UCSF Dye Screen Processing",
              
                  tabPanel("Pick hits",
@@ -19,6 +17,7 @@ ui <- navbarPage("UCSF Dye Screen Processing",
                               column(9,
                                      wellPanel(id = "facet_plot",
                                                plotOutput("plot1", dblclick = "plot_dblclick"),
+                                               plotOutput("plot12"),
                                                style = "overflow-y:scroll; max-height: 600px")
                               ),
                               column(3,
@@ -32,17 +31,32 @@ server <- function(session, input, output) {
     values <- reactiveValues()
     values$df_models_shiny <- readRDS("../4_analyze/values_df_models.rds")
     values$df_BIC_models_shiny <- readRDS("../4_analyze/values_df__BIC_models.rds")
+    
+    observeEvent( {values$df_models_shiny
+                 values$df_BIC_models_shiny},
+                 {
+                     values$df_models_shiny_p <- cond_df_model_for_plot(values$df_models_shiny, values$df_BIC_models_shiny ) #readRDS("../4_analyze/values_df_models.rds") %>% 
+                     values$df_BIC_models_shiny_p <- cond_df_BIC_for_plot ( values$df_BIC_models_shiny  ) #readRDS("../4_analyze/values_df__BIC_models.rds")
+        
+    })
+
+
     values$df_BIC_best <-  readRDS("../4_analyze/values_df__BIC_models.rds") %>%
                             cond_df_BIC_for_plot() %>%
                             filter(is_min == TRUE) %>%
                             select(c(well, condition, which_model)) 
+    #write_rds(values$df_BIC_best, "../4_analyze/values_df_BIC_best_init.rds")
     
     # make the Rshiny visualized version of the hit-calling plot
     output$plot1 <- renderPlot({
-        plot_all_fits_shiny(values$df_models_shiny, values$df_BIC_models_shiny)
+        plot_all_fits_shiny(values$df_models_shiny_p , values$df_BIC_models_shiny_p )
     })
     
+    output$plot12 <- renderPlot({
+        plot_best_fits_shiny(values$df_models_shiny_p, values$df_BIC_best)
 
+    })
+    
     output$table <- DT::renderDataTable( {
         values$fit_sel <-  subset(
             nearPoints(values$df_models_shiny %>% cond_df_model_for_plot(., values$df_BIC_models_shiny),
@@ -58,7 +72,7 @@ server <- function(session, input, output) {
                               filter(! well %in% values$fit_sel$well ) %>% # remove the wells to be overwritten
                               full_join(values$fit_sel) %>%
                               arrange(condition, well) 
-            
+        write_rds(values$df_BIC_best, "../4_analyze/values_df_BIC_best_post_click.rds")
         values$df_BIC_display <<- values$df_BIC_best %>%
                                 mutate(`best model` = recode(which_model,
                                                             s1_pred = "Fit 1", 

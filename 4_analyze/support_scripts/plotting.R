@@ -127,6 +127,7 @@ plotDownload <- function(input, output, session, plotFun) { #https://github.com/
 }
 
 ## for model fitting plots
+# this code to be added to plotting.R
 cond_df_model_for_plot <- function( model_df, df_BIC ) {
   model_df %>%
     group_by(well) %>%
@@ -190,13 +191,12 @@ dsfworld_default_model <- theme( # adapted from free amino acids hit call
   aspect.ratio = (1/1.618)
 )
 
-plot_all_fits_shiny <- function(df_models_in, df_BIC_in) {
-  df_models <- cond_df_model_for_plot(df_models_in, df_BIC_in ) # create the plot-conditioned model df
-  df_BIC <- cond_df_BIC_for_plot ( df_BIC_in ) # create the plot-conditioned BIC df
+
+plot_all_fits_shiny <- function(df_models, df_BIC) { # takes pre-conditioned dataframes 
   
   # create vectors used to label and position data within the plots
   model_names <- make_model_names( df_models$which_model %>% unique() )
-  well_names <- match_well_to_cond( df_mod_test )
+  well_names <- match_well_to_cond( df_models )
   mid_temp <- (max(df_models$Temperature) - min(df_models$Temperature))/2 + min(df_models$Temperature)
   
   
@@ -223,6 +223,66 @@ plot_all_fits_shiny <- function(df_models_in, df_BIC_in) {
     ) +
     
     scale_alpha_manual (values = c(0.7, 1), guide = FALSE) +
+    scale_linetype_manual (values = c("pred" = "solid", "value_norm" = "dashed"),
+                           name="",
+                           breaks=c( "value_norm", "pred"),
+                           labels=c("Data", "Fits")
+    ) +
+    scale_color_manual (values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"),
+                        name="Fit component",
+                        breaks=c("full_pred", "sigmoid_1", "sigmoid_2", "initial_decay"),
+                        labels=c("Final fit", "Sigmoid 1", "Sigmoid 2", "Initial RFU")
+    ) +
+    guides  (linetype = guide_legend(order = 1),
+             color = guide_legend(order = 2))+
+    
+    ylim (c(0, 1.4))+
+    theme_bw() +
+    dsfworld_default_model +
+    labs (x = "Temperature (ºC)", y = "Normalized RFU")
+}
+
+plot_best_fits_shiny <- function(df_models, df_best_in) {
+  # create vectors used to label and position data within the plots
+  well_names <- match_well_to_cond( df_models )
+  mid_temp <- (max(df_models$Temperature) - min(df_models$Temperature))/2 + min(df_models$Temperature)
+  
+  df_best <- df_best_in %>%
+    mutate(best_model = which_model) %>%
+    mutate(best_model_human = recode(best_model,
+                                     s1_pred = "Fit 1",
+                                     s1_d_pred = "Fit 2",
+                                     s2_pred = "Fit 3",
+                                     s2_d_pred = "Fit 4")) 
+  
+  df_models_best <- df_models_p %>% 
+    full_join(df_best)  %>%
+    dplyr::filter(which_model == best_model) %>%
+    mutate(best_model = recode(best_model,
+                               s1_pred = "Fit 1",
+                               s1_d_pred = "Fit 2",
+                               s2_pred = "Fit 3",
+                               s2_d_pred = "Fit 4")) 
+  df_models_best %>%
+    ggplot() +
+    geom_line (aes(x = Temperature, # RFU data, fitted and "real"
+                   y = value, 
+                   linetype = which_value, 
+                   color = component, 
+                   group = interaction(which_model, component, which_value)
+    ), 
+    alpha = 0.5) +
+    geom_text (data = df_best, 
+               aes(label = paste0("Selected: ", best_model_human), # BIC values for fits
+                   x = 50,
+                   y = 1.3,
+                   group = well),
+               size = 3) +
+    facet_wrap(~well,  #, 
+               labeller = labeller(well = well_names)
+    ) +
+    
+    # scale_alpha_manual (values = c(0.7, 1), guide = FALSE) +
     scale_linetype_manual (values = c("pred" = "solid", "value_norm" = "dashed"),
                            name="",
                            breaks=c( "value_norm", "pred"),
