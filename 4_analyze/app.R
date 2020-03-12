@@ -133,6 +133,7 @@ ui <- navbarPage( useShinyalert(),
                                                                                                   bsCollapsePanel(p("Plot and selet models for each condition", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                                   #p("Click 'Plot model comparision' below to display the four models side-by-side. Use this plot to select the best model for each condition. ", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                                   uiOutput("show_BIC_plot"),
+                                                                                                                  DT::dataTableOutput("best_model_table"),
                                                                                                                   
                                                                                                                   p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
                                                                                                                   p("For each condition, the model with the lowest Bayesian Information Criterion (BIC) is selected by default, to maximize model quality without over-fitting (see 'About the analysis').", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
@@ -175,7 +176,7 @@ ui <- navbarPage( useShinyalert(),
                                                                        plotDownloadUI("plot1"), 
                                                                        textInput("plot_download_name", "Downloaded plot name", value = "dsfworld_plot")
                                                            ),
-                                                           plotOutput("plot", height = "auto") %>% withSpinner(color="#525252"), style = ("overflow-y:scroll; max-height: 600px") 
+                                                           plotOutput("plot", height = "auto",  dblclick = "plot_dblclick") %>% withSpinner(color="#525252"), style = ("overflow-y:scroll; max-height: 600px") 
                                                        ), width = 7)
                                                )
                                       )
@@ -428,8 +429,8 @@ server <- function(session, input, output) {
             # write_rds(values$df_models, "values_df_models.rds")
             
             #update the tm table for display df_tm_models_table <- df_tm_models %>%
-            model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")# doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
-            model_name_true <- reactive(model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)])
+            model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") # doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
+            model_name_true <- reactive({model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)]})
            
             values$df_tm_models_table <- values$df_tm_models %>%
                 dplyr::filter( which_model %in% model_name_true()  ) %>%
@@ -437,6 +438,22 @@ server <- function(session, input, output) {
                 set_names(c("Condition", "Model", "Tma 1", "Tma 1 SD", "Tma 2", "Tma 2 SD")) %>%
                 discard(~all(is.na(.x)))
             
+            # values$df_BIC_best <-  cond_df_BIC_for_plot ( values$df_BIC_models   ) %>%
+            #                         filter(is_min == TRUE) %>%
+            #                         select(c(well, condition, which_model))
+            
+            values$df_models_filt <- values$df_models %>% dplyr::filter(which_model %in% model_name_true()) 
+            values$df_BIC_models_filt <- values$df_BIC_models %>% dplyr::filter(which_model %in% model_name_true()) 
+            
+            values$df_models_p <- cond_df_model_for_plot( values$df_models_filt, values$df_BIC_models_filt  ) 
+            
+            values$df_BIC_models_p <- values$df_BIC_models_filt %>%
+                cond_df_BIC_for_plot (  ) # adds is_min #readRDS("../4_analyze/values_df__BIC_models.rds")
+            
+            values$df_BIC_best <-  cond_df_BIC_for_plot ( values$df_BIC_models_filt   ) %>%
+                filter(is_min == TRUE) %>%
+                select(c(well, condition, which_model))
+
             # update which models are available for plotting
             mods_available <- named_mods[c(input$s1, input$s1_d, input$s2, input$s2_d)] # the original named_mods is created outside the server
             updateRadioButtons(session, "choose_model_tm",
@@ -454,21 +471,97 @@ server <- function(session, input, output) {
     
 
     
-    ## display the model plot, with all  comonents. 
-    ### choose the best model 
-    
+    # display the model plot, with all  comonents.
+    ## choose the best model
     output$show_BIC_plot <- renderUI({
         req(values$df)
-        actionButton("show_BIC_plots", 
+        actionButton("show_BIC_plot", 
                      p("Display data with fits for all selected models.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),  width = '100%')
-                     
-                     
-                     #p("Plot model comparison.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black", align = "center") %>% strong(),  width = '100%')
+        #p("Plot model comparison.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black", align = "center") %>% strong(),  width = '100%')
     })
     
-    model_plot <- renderPlot({
-        plot_all_fits_shiny(values$df_models, values$df_BIC_models)
+    observeEvent( { input$s1
+                    input$s1_d
+                    input$s2
+                    input$s2_d 
+                    input$show_BIC_plot}, { # when BIC plot is to be shonw, make the conditioned data
+                    print("updating the plot-conditioned data")
+                        
+                        model_name_true <- reactive({model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)]})
+                        print(model_name_true())
+                        
+                        values$df_models_filt <- values$df_models %>% dplyr::filter(which_model %in% model_name_true()) 
+                        values$df_BIC_models_filt <- values$df_BIC_models %>% dplyr::filter(which_model %in% model_name_true()) 
+                        
+                        values$df_models_p <- cond_df_model_for_plot( values$df_models_filt, values$df_BIC_models_filt  ) 
+                        
+                        values$df_BIC_models_p <- values$df_BIC_models_filt %>%
+                                                    cond_df_BIC_for_plot (  ) # adds is_min #readRDS("../4_analyze/values_df__BIC_models.rds")
+                        
+                        values$df_BIC_best <-  cond_df_BIC_for_plot ( values$df_BIC_models_filt   ) %>%
+                                                filter(is_min == TRUE) %>%
+                                                select(c(well, condition, which_model))
+        })
+    
+    # make the Rshiny visualized version of the hit-calling plot
+    output$model_plot_all <- renderPlot({
+        plot_all_fits_shiny(values$df_models_p , values$df_BIC_models_p )
     })
+    
+    output$model_plot_chosen <- renderPlot({
+        plot_best_fits_shiny(values$df_models_p, values$df_BIC_best)
+    })
+    
+    output$best_model_table <- DT::renderDataTable( {
+        tryCatch({
+            values$fit_sel <-  subset(
+                nearPoints(values$df_BIC_models_p,
+                           input$plot_dblclick,
+                           threshold = 1000, # set large,so anywhere in the plot area will work 
+                           allRows = TRUE),
+                selected_ == TRUE) %>%
+                select(c(well, condition, which_model)) %>%
+                distinct(which_model, .keep_all = TRUE) %>%
+                arrange(condition, well)
+            
+            values$df_BIC_best <<- values$df_BIC_best %>%
+                filter(! well %in% values$fit_sel$well ) %>% # remove the wells to be overwritten
+                full_join(values$fit_sel) %>%
+                arrange(condition, well) 
+            
+            #write_rds(values$df_BIC_best, "../4_analyze/values_df_BIC_best_post_click.rds")
+            values$df_BIC_display <<- values$df_BIC_best %>%
+                mutate(`best model` = recode(which_model,
+                                             s1_pred = "Fit 1",
+                                             s1_d_pred = "Fit 2",
+                                             s2_pred = "Fit 3",
+                                             s2_d_pred = "Fit 4")) %>%
+                select(c(well, condition, `best model`))
+            values$df_BIC_display # this will render in the table  
+        }, error = function(e) {
+            
+            values$df_BIC_display <<- values$df_BIC_best %>%
+                mutate(`best model` = recode(which_model,
+                                             s1_pred = "Fit 1",
+                                             s1_d_pred = "Fit 2",
+                                             s2_pred = "Fit 3",
+                                             s2_d_pred = "Fit 4")) %>%
+                select(c(well, condition, `best model`))
+            values$df_BIC_display # this will render in the table 
+            
+        })
+
+
+    }, options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
+    
+    
+    
+    
+ 
+    
+    # model_plot <- renderPlot({
+    #     plot_all_fits_shiny(values$df_models, values$df_BIC_models)
+    # })
     
     # 
 } # end server

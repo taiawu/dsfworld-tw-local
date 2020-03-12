@@ -469,6 +469,7 @@ df_models_bic_p <- cond_df_BIC_for_plot ( df_BIC_models_shiny )
 plot_all_fits_shiny(df_models_p, df_models_bic_p)
 
 df_BIC_best <- readRDS( "../4_analyze/values_df_BIC_best_post_click.rds")
+df_BIC_models_shiny
 plot_best_fits_shiny(df_models_p, df_BIC_best)
 ```
 ```{r}

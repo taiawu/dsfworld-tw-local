@@ -16,8 +16,8 @@ ui <- navbarPage("UCSF Dye Screen Processing",
                           fluidRow(
                               column(9,
                                      wellPanel(id = "facet_plot",
-                                               plotOutput("plot1", dblclick = "plot_dblclick"),
-                                               plotOutput("plot12"),
+                                               plotOutput("model_plot_all", dblclick = "plot_dblclick"),
+                                               plotOutput("model_plot_chosen"),
                                                style = "overflow-y:scroll; max-height: 600px")
                               ),
                               column(3,
@@ -48,11 +48,11 @@ server <- function(session, input, output) {
     #write_rds(values$df_BIC_best, "../4_analyze/values_df_BIC_best_init.rds")
     
     # make the Rshiny visualized version of the hit-calling plot
-    output$plot1 <- renderPlot({
+    output$model_plot_all <- renderPlot({
         plot_all_fits_shiny(values$df_models_shiny_p , values$df_BIC_models_shiny_p )
     })
     
-    output$plot12 <- renderPlot({
+    output$model_plot_chosen <- renderPlot({
         plot_best_fits_shiny(values$df_models_shiny_p, values$df_BIC_best)
 
     })
