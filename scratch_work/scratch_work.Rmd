@@ -551,6 +551,12 @@ tibble(
 )
 ```
 
+# getting tmas by dRFU from models 
+```{r}
+
+```
+
+
 
 
 

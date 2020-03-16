@@ -20,12 +20,9 @@ library(rhandsontable) # user-interactive tables
 library(shiny) # for shiny web-apps 
 
 named_mods <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") %>%
-    #set_names("Model 1", "Model 2", "Model 3", "Model 4")
     set_names("Fit 1", "Fit 2", "Fit 3", "Fit 4")
 
 ui <- navbarPage( useShinyalert(),
-                
-                
                  #tabPanel(p("to data analysis", style = "font-family: 'Avenir Next'; font-size: 20px; color: grey",align = "right")),
                  # Data Analysis --------------------------------------------------------------------------------
                  tabPanel(p("to data analysis", style = "font-family: 'Avenir Next'; font-size: 20px; color: grey",align = "center"), value = "data_analysis_mother", # end tab panel (tabset, div, main still remaining)
@@ -181,7 +178,6 @@ ui <- navbarPage( useShinyalert(),
                                                )
                                       )
                           )) # end tabset Panel (contains all "analysis sub-panels)
-#div (dataTableOutput ("tm_table_render_models"), style = "font-size: 70%")            
 ) # end 
 
 # Define server logic required to draw a histogram
@@ -192,7 +188,7 @@ server <- function(session, input, output) {
     values$df <- readRDS("values_df_with_layout.rds")
     values$df_1 <- readRDS("values_df_with_layout.rds")
     
-    values$plot_chosen <- "initial"
+   
     
 # data layout and handling server --------------------------- 
 
@@ -234,15 +230,24 @@ server <- function(session, input, output) {
                     plot.title = element_text(lineheight=.8, face="bold", size = 10*1.5)) 
     })
     
+    values$plot_chosen <- "initial" # the starting value
     observeEvent(values$data_raw, { values$plot_chosen <- "initial"  })    
     observeEvent(input$update_plot, { values$plot_chosen <- "updated"  })
-    observeEvent(values$show_model_plot, { values$show_model_plot <- "model"  })  
+    observeEvent(input$show_BIC_plot, { 
+        #print("input$show_BIC_plot clicked")
+        values$plot_chosen <- "all_model"  })  
+    observeEvent(values$show_best_model_plot, { values$plot_chosen <- "best_model"  })
     
     chosen_plot <- reactive({
+        values$plot_chosen
         if (values$plot_chosen == "updated") { # TRUE when the "update plot" button was clicked more recently than new data uploads or "show model plot"
             plot_updated()
-        } else if (values$plot_chosen == "model") { # TRUE when the "show model plot" button was clicked more recently than new data uploads or "update model plot"
-            plot2()
+        } else if (values$plot_chosen == "all_model") { # TRUE when the "show model plot" button was clicked more recently than new data uploads or "update model plot"
+            print("plotting all fits")
+            plot_all_fits_shiny(values$df_models_p , values$df_BIC_models_p )
+        } else if (values$plot_chosen == "best_model") {
+            print("plotting best fits")
+            plot_best_fits_shiny(values$df_models_p, values$df_BIC_best)
         } else { # if its the initial plot
             plot_initial()  # this is the default
         }
@@ -254,7 +259,6 @@ server <- function(session, input, output) {
         } else {
             # adapted from https://github.com/rstudio/shiny/issues/650
             h_dyn <- gg_facet_nrow_ng(plot_updated()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot_updated())))*(1/1.618)
-            
             if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { 
                 height <- session$clientData$output_data_width * (1/1.618)
             } else { height <- h_dyn
@@ -462,6 +466,25 @@ server <- function(session, input, output) {
             )
         })
     
+    observeEvent( {input$show_BIC_plot
+                    input$trim_ends
+    }, {
+        model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") # doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
+        model_name_true <- reactive({model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)]})
+        
+        values$df_models_filt <- values$df_models %>% dplyr::filter(which_model %in% model_name_true()) 
+        values$df_BIC_models_filt <- values$df_BIC_models %>% dplyr::filter(which_model %in% model_name_true()) 
+        
+        values$df_models_p <- cond_df_model_for_plot( values$df_models_filt, values$df_BIC_models_filt  ) 
+        
+        values$df_BIC_models_p <- values$df_BIC_models_filt %>%
+            cond_df_BIC_for_plot (  ) # adds is_min #readRDS("../4_analyze/values_df__BIC_models.rds")
+        
+        values$df_BIC_best <-  cond_df_BIC_for_plot ( values$df_BIC_models_filt   ) %>%
+            filter(is_min == TRUE) %>%
+            select(c(well, condition, which_model)) 
+    })
+    
     # render the model table
     output$tm_table_render_models <- DT::renderDataTable({ ### new for models
         req(values$df_tm_models_table)
@@ -480,37 +503,14 @@ server <- function(session, input, output) {
         #p("Plot model comparison.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black", align = "center") %>% strong(),  width = '100%')
     })
     
-    observeEvent( { input$s1
-                    input$s1_d
-                    input$s2
-                    input$s2_d 
-                    input$show_BIC_plot}, { # when BIC plot is to be shonw, make the conditioned data
-                    print("updating the plot-conditioned data")
-                        
-                        model_name_true <- reactive({model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)]})
-                        print(model_name_true())
-                        
-                        values$df_models_filt <- values$df_models %>% dplyr::filter(which_model %in% model_name_true()) 
-                        values$df_BIC_models_filt <- values$df_BIC_models %>% dplyr::filter(which_model %in% model_name_true()) 
-                        
-                        values$df_models_p <- cond_df_model_for_plot( values$df_models_filt, values$df_BIC_models_filt  ) 
-                        
-                        values$df_BIC_models_p <- values$df_BIC_models_filt %>%
-                                                    cond_df_BIC_for_plot (  ) # adds is_min #readRDS("../4_analyze/values_df__BIC_models.rds")
-                        
-                        values$df_BIC_best <-  cond_df_BIC_for_plot ( values$df_BIC_models_filt   ) %>%
-                                                filter(is_min == TRUE) %>%
-                                                select(c(well, condition, which_model))
-        })
-    
-    # make the Rshiny visualized version of the hit-calling plot
-    output$model_plot_all <- renderPlot({
-        plot_all_fits_shiny(values$df_models_p , values$df_BIC_models_p )
-    })
-    
-    output$model_plot_chosen <- renderPlot({
-        plot_best_fits_shiny(values$df_models_p, values$df_BIC_best)
-    })
+    # # make the Rshiny visualized version of the hit-calling plot
+    # output$model_plot_all <- renderPlot({
+    #     plot_all_fits_shiny(values$df_models_p , values$df_BIC_models_p )
+    # })
+    # 
+    # output$model_plot_chosen <- renderPlot({
+    #     plot_best_fits_shiny(values$df_models_p, values$df_BIC_best)
+    # })
     
     output$best_model_table <- DT::renderDataTable( {
         tryCatch({

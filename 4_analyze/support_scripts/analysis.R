@@ -326,7 +326,7 @@ s1_d_model <- function(df, par_start) {# runs fine
   )
 }
 
-s1_model <- function(df, par_start) {# runs fine
+s1_model <- function(df, par_start) { # runs fine
   xmid1 <- df[par_start,]$Temperature_norm[1]
   if (is.na(xmid1) == TRUE ) {xmid1 <- 0.6} # when wil this be NA, anyway? catch this
   xmid2 <- df[par_start,]$Temperature_norm[2]
