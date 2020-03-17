@@ -129,7 +129,7 @@ ui <- navbarPage( useShinyalert(),
                                                                                                   p(" ", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
                                                                                                   bsCollapsePanel(p("Plot and selet models for each condition", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                                   #p("Click 'Plot model comparision' below to display the four models side-by-side. Use this plot to select the best model for each condition. ", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                                  uiOutput("show_BIC_plot"),
+                                                                                                                  uiOutput("show_BIC_plot_button"),
                                                                                                                   DT::dataTableOutput("best_model_table"),
                                                                                                                   
                                                                                                                   p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
@@ -230,50 +230,103 @@ server <- function(session, input, output) {
                     plot.title = element_text(lineheight=.8, face="bold", size = 10*1.5)) 
     })
     
+    fit_plots <- eventReactive( input$show_BIC_plot, {
+                        print("plotting all fits")
+                        plot_all_fits_shiny(values$df_models_p, values$df_BIC_models_p ) 
+    })
+    
+    fit_plots_best <- eventReactive( input$show_best_model_plot, {
+        print("plotting best fits")
+        plot_best_fits_shiny(values$df_models_p, values$df_BIC_best)
+    })
+    
     values$plot_chosen <- "initial" # the starting value
     observeEvent(values$data_raw, { values$plot_chosen <- "initial"  })    
     observeEvent(input$update_plot, { values$plot_chosen <- "updated"  })
-    observeEvent(input$show_BIC_plot, { 
-        #print("input$show_BIC_plot clicked")
-        values$plot_chosen <- "all_model"  })  
-    observeEvent(values$show_best_model_plot, { values$plot_chosen <- "best_model"  })
+    observeEvent(input$show_BIC_plot, { values$plot_chosen <- "all_model"  })  
+    observeEvent(input$show_best_model_plot, { values$plot_chosen <- "best_model"  })
     
     chosen_plot <- reactive({
         values$plot_chosen
         if (values$plot_chosen == "updated") { # TRUE when the "update plot" button was clicked more recently than new data uploads or "show model plot"
             plot_updated()
         } else if (values$plot_chosen == "all_model") { # TRUE when the "show model plot" button was clicked more recently than new data uploads or "update model plot"
-            print("plotting all fits")
-            plot_all_fits_shiny(values$df_models_p , values$df_BIC_models_p )
+            fit_plots()
         } else if (values$plot_chosen == "best_model") {
-            print("plotting best fits")
-            plot_best_fits_shiny(values$df_models_p, values$df_BIC_best)
+            fit_plots_best()
         } else { # if its the initial plot
             plot_initial()  # this is the default
         }
     })
     
-    plot_height <- eventReactive(input$update_plot, {
-        if (input$facet == "none") {
-            height <- 400 
-        } else {
-            # adapted from https://github.com/rstudio/shiny/issues/650
-            h_dyn <- gg_facet_nrow_ng(plot_updated()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot_updated())))*(1/1.618)
-            if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { 
-                height <- session$clientData$output_data_width * (1/1.618)
-            } else { height <- h_dyn
-            }
-        } 
-        height
-    })
-    
+# plot_height <- reactive({
+#     values$plot_chosen
+#     if (values$plot_chosen == "updated") { # TRUE when the "update plot" button was clicked more recently than new data uploads or "show model plot"
+#                 if (input$facet == "none") {
+#                     height <- 400
+#                 } else {
+#                     # adapted from https://github.com/rstudio/shiny/issues/650
+#                     h_dyn <- gg_facet_nrow_ng(plot_updated()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot_updated())))*(1/1.618)
+#                     if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { # if the calulcated height fits within the screen
+#                         height <- session$clientData$output_data_width * (1/1.618) # if the calulcated height fits within the screen
+#                     } else { height <- h_dyn }
+#                 } 
+#                 height
+#         
+#     } else if (values$plot_chosen == "all_model") { # TRUE when the "show model plot" button was clicked more recently than new data uploads or "update model plot"
+#                  # adapted from https://github.com/rstudio/shiny/issues/650
+#                  h_dyn <- gg_facet_nrow_ng(fit_plots()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(fit_plots())))*(1/1.618)
+#                  if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { # if the calulcated height fits within the screen
+#                      height <- session$clientData$output_data_width * (1/1.618) # if the calulcated height fits within the screen
+#                  } else { height <- h_dyn }
+#                  height
+#         
+#     } else if (values$plot_chosen == "best_model") {
+#         h_dyn <- gg_facet_nrow_ng(fit_plots_best()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(fit_plots_best())))*(1/1.618)
+#         if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { # if the calulcated height fits within the screen
+#             height <- session$clientData$output_data_width * (1/1.618) # if the calulcated height fits within the screen
+#         } else { height <- h_dyn }
+#         height
+#         
+#     } else { # if its the initial plot
+#         height <- 400
+#     } 
+# })
+   # plot_height <- eventReactive( {input$update_plot
+    #                                input$show_BIC_plot
+    #                                input$show_best_model_plot}, {
+    #     if (input$facet == "none") {
+    #         height <- 400
+    #     } else {
+    #         # adapted from https://github.com/rstudio/shiny/issues/650
+    #         h_dyn <- gg_facet_nrow_ng(chosen_plot()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(chosen_plot())))*(1/1.618)
+    #         if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { # if the calulcated height fits within the screen
+    #             height <- session$clientData$output_data_width * (1/1.618) # if the calulcated height fits within the screen
+    #         } else { height <- h_dyn
+    #         }
+    #     }
+    #     height
+    # })
+    # 
     output$plot <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
         chosen_plot()
     }, height = function() 
         if (values$plot_chosen == "initial") { 400 
-        } else {
-            plot_height() 
-        }  
+         } else {
+             if (input$facet == "none") {
+                 height <- 400
+             } else {
+                 # adapted from https://github.com/rstudio/shiny/issues/650
+                 h_dyn <- gg_facet_nrow_ng(chosen_plot()) * ((session$clientData$output_plot_width-100)/(gg_facet_ncol_ng(chosen_plot())))*(1/1.618)
+                 if ( h_dyn < session$clientData$output_plot_width * (1/1.618) ) { # if the calulcated height fits within the screen
+                     height <- session$clientData$output_plot_width * (1/1.618) # if the calulcated height fits within the screen
+                 } else { height <- h_dyn
+                 }
+             }
+             height
+         }
+            # plot_height() 
+          
     ) 
     
 # tm determination server  ---------------------------  
@@ -370,8 +423,6 @@ server <- function(session, input, output) {
     # fit the requested models
     observeEvent(values$df_fit, {
         values$start_pars <- get_start_pars(values$df_fit)
-        print("values$start_pars")
-        print(values$start_pars)
         
         # first, fit the s1 model
         # this will over-write the summary dataframes, re-setting the models to follow
@@ -446,10 +497,6 @@ server <- function(session, input, output) {
                 set_names(c("Condition", "Model", "Tma 1", "Tma 1 SD", "Tma 2", "Tma 2 SD")) %>%
                 discard(~all(is.na(.x)))
             
-            # values$df_BIC_best <-  cond_df_BIC_for_plot ( values$df_BIC_models   ) %>%
-            #                         filter(is_min == TRUE) %>%
-            #                         select(c(well, condition, which_model))
-            
             values$df_models_filt <- values$df_models %>% dplyr::filter(which_model %in% model_name_true()) 
             values$df_BIC_models_filt <- values$df_BIC_models %>% dplyr::filter(which_model %in% model_name_true()) 
             
@@ -471,9 +518,8 @@ server <- function(session, input, output) {
         })
     
     observeEvent( {input$show_BIC_plot
-                    input$trim_ends
-    }, {
-        model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") # doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
+                    input$trim_ends}, {
+        model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") # doesn't need to be in the server or this observer but is fast enough to justify, since it makes the next step clearer
         model_name_true <- reactive({model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)]})
 
         values$df_models_filt <- values$df_models %>% dplyr::filter(which_model %in% model_name_true())
@@ -482,7 +528,7 @@ server <- function(session, input, output) {
         values$df_models_p <- cond_df_model_for_plot( values$df_models_filt, values$df_BIC_models_filt  )
 
         values$df_BIC_models_p <- values$df_BIC_models_filt %>%
-            cond_df_BIC_for_plot (  ) # adds is_min #readRDS("../4_analyze/values_df__BIC_models.rds")
+            cond_df_BIC_for_plot(  ) # adds is_min #readRDS("../4_analyze/values_df__BIC_models.rds")
 
         values$df_BIC_best <-  cond_df_BIC_for_plot ( values$df_BIC_models_filt   ) %>%
             filter(is_min == TRUE) %>%
@@ -500,11 +546,10 @@ server <- function(session, input, output) {
     
     # display the model plot, with all  comonents.
     ## choose the best model
-    output$show_BIC_plot <- renderUI({
+    output$show_BIC_plot_button <- renderUI({
         req(values$df)
         actionButton("show_BIC_plot", 
-                     p("Display data with fits for all selected models.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),  width = '100%')
-        #p("Plot model comparison.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black", align = "center") %>% strong(),  width = '100%')
+                     p("Display/update plot with fits for all selected models.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),  width = '100%')
     })
     
     # # make the Rshiny visualized version of the hit-calling plot
@@ -558,16 +603,7 @@ server <- function(session, input, output) {
 
     }, options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
     
-    
-    
-    
- 
-    
-    # model_plot <- renderPlot({
-    #     plot_all_fits_shiny(values$df_models, values$df_BIC_models)
-    # })
-    
-    # 
+
 } # end server
 # Run the application 
 shinyApp(ui = ui, server = server)
