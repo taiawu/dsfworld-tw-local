@@ -255,7 +255,7 @@ plot_best_fits_shiny <- function(df_models, df_best_in) {
                                      s2_pred = "Fit 3",
                                      s2_d_pred = "Fit 4")) 
   
-  df_models_best <- df_models_p %>% 
+  df_models_best <- df_models %>% 
     full_join(df_best)  %>%
     dplyr::filter(which_model == best_model) %>%
     mutate(best_model = recode(best_model,

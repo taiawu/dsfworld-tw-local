@@ -127,22 +127,24 @@ ui <- navbarPage( useShinyalert(),
                                                                                                   uiOutput("trim_ends"),  
 
                                                                                                   p(" ", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
-                                                                                                  bsCollapsePanel(p("Plot and selet models for each condition", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
+                                                                                                  bsCollapsePanel(p("Make all fits plot: view and select models for each condition", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                                   #p("Click 'Plot model comparision' below to display the four models side-by-side. Use this plot to select the best model for each condition. ", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                                   uiOutput("show_BIC_plot_button"),
                                                                                                                   DT::dataTableOutput("best_model_table"),
-                                                                                                                  
                                                                                                                   p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
-                                                                                                                  p("For each condition, the model with the lowest Bayesian Information Criterion (BIC) is selected by default, to maximize model quality without over-fitting (see 'About the analysis').", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                                  
-                                                                                                                  p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
-                                                                                                                  p("To change model selections", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),
-                                                                                                                  p("Select a model for each condition manually by double-clicking on the desired model in the plot. ", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
+                                                                                                                  p("Selecting fits", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),
+                                                                                                                   
+                                                                                                                  p("For each condition, the fit option (1-4) with the lowest Bayesian Information Criterion (BIC) is selected by default. This is meant to maximize model quality without over-fitting (see 'About the analysis').", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "left"),
                                                                                                                   
                                                                                                                   p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
                                                                                                                   
-                                                                                                                  p("Or, to change multiple model selections at a time, edit the table below and press 'Apply model selections from table'. ", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                                  uiOutput("apply_handson_models")
+                                                                                                                  p("However, you can select a fit manually by double-clicking on the desired fit in the 'All fits' plot.", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
+                                                                                                                  uiOutput("show_best_fits_button")
+                                                                                                                  # 
+                                                                                                                  # p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
+                                                                                                                  # 
+                                                                                                                  # p("Or, to change multiple model selections at a time, edit the table below and press 'Apply model selections from table'. ", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
+                                                                                                                  # uiOutput("apply_handson_models")
                                                                                                                
                                                                                                                   
                                                                                                   )
@@ -235,7 +237,7 @@ server <- function(session, input, output) {
                         plot_all_fits_shiny(values$df_models_p, values$df_BIC_models_p ) 
     })
     
-    fit_plots_best <- eventReactive( input$show_best_model_plot, {
+    fit_plots_best <- eventReactive( input$show_best_fits, {
         print("plotting best fits")
         plot_best_fits_shiny(values$df_models_p, values$df_BIC_best)
     })
@@ -244,7 +246,7 @@ server <- function(session, input, output) {
     observeEvent(values$data_raw, { values$plot_chosen <- "initial"  })    
     observeEvent(input$update_plot, { values$plot_chosen <- "updated"  })
     observeEvent(input$show_BIC_plot, { values$plot_chosen <- "all_model"  })  
-    observeEvent(input$show_best_model_plot, { values$plot_chosen <- "best_model"  })
+    observeEvent(input$show_best_fits, { values$plot_chosen <- "best_model"  })
     
     chosen_plot <- reactive({
         values$plot_chosen
@@ -259,62 +261,13 @@ server <- function(session, input, output) {
         }
     })
     
-# plot_height <- reactive({
-#     values$plot_chosen
-#     if (values$plot_chosen == "updated") { # TRUE when the "update plot" button was clicked more recently than new data uploads or "show model plot"
-#                 if (input$facet == "none") {
-#                     height <- 400
-#                 } else {
-#                     # adapted from https://github.com/rstudio/shiny/issues/650
-#                     h_dyn <- gg_facet_nrow_ng(plot_updated()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(plot_updated())))*(1/1.618)
-#                     if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { # if the calulcated height fits within the screen
-#                         height <- session$clientData$output_data_width * (1/1.618) # if the calulcated height fits within the screen
-#                     } else { height <- h_dyn }
-#                 } 
-#                 height
-#         
-#     } else if (values$plot_chosen == "all_model") { # TRUE when the "show model plot" button was clicked more recently than new data uploads or "update model plot"
-#                  # adapted from https://github.com/rstudio/shiny/issues/650
-#                  h_dyn <- gg_facet_nrow_ng(fit_plots()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(fit_plots())))*(1/1.618)
-#                  if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { # if the calulcated height fits within the screen
-#                      height <- session$clientData$output_data_width * (1/1.618) # if the calulcated height fits within the screen
-#                  } else { height <- h_dyn }
-#                  height
-#         
-#     } else if (values$plot_chosen == "best_model") {
-#         h_dyn <- gg_facet_nrow_ng(fit_plots_best()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(fit_plots_best())))*(1/1.618)
-#         if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { # if the calulcated height fits within the screen
-#             height <- session$clientData$output_data_width * (1/1.618) # if the calulcated height fits within the screen
-#         } else { height <- h_dyn }
-#         height
-#         
-#     } else { # if its the initial plot
-#         height <- 400
-#     } 
-# })
-   # plot_height <- eventReactive( {input$update_plot
-    #                                input$show_BIC_plot
-    #                                input$show_best_model_plot}, {
-    #     if (input$facet == "none") {
-    #         height <- 400
-    #     } else {
-    #         # adapted from https://github.com/rstudio/shiny/issues/650
-    #         h_dyn <- gg_facet_nrow_ng(chosen_plot()) * ((session$clientData$output_data_width-100)/(gg_facet_ncol_ng(chosen_plot())))*(1/1.618)
-    #         if ( h_dyn < session$clientData$output_data_width * (1/1.618) ) { # if the calulcated height fits within the screen
-    #             height <- session$clientData$output_data_width * (1/1.618) # if the calulcated height fits within the screen
-    #         } else { height <- h_dyn
-    #         }
-    #     }
-    #     height
-    # })
-    # 
     output$plot <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
         chosen_plot()
     }, height = function() 
-        if (values$plot_chosen == "initial") { 400 
+        if (values$plot_chosen == "initial") { 400 # the initial plot has a 400 px height
          } else {
              if (input$facet == "none") {
-                 height <- 400
+                 height <- 400  # the initial plot has a 400 px height
              } else {
                  # adapted from https://github.com/rstudio/shiny/issues/650
                  h_dyn <- gg_facet_nrow_ng(chosen_plot()) * ((session$clientData$output_plot_width-100)/(gg_facet_ncol_ng(chosen_plot())))*(1/1.618)
@@ -325,9 +278,19 @@ server <- function(session, input, output) {
              }
              height
          }
-            # plot_height() 
-          
-    ) 
+    )
+    
+    output$final_plot <- renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
+        req(values$df)
+        sliderInput("trim_ends", 
+                    p("Restrict fits to a temperature range", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"), 
+                    min = min(unnest(values$df)$Temperature), max = max(unnest(values$df)$Temperature),
+                    value = c(min(unnest(values$df)$Temperature),
+                              max(unnest(values$df)$Temperature)),
+                    step = 1)
+    }) # trim the ends off of the data to improve fitting
+    
+    
     
 # tm determination server  ---------------------------  
     observeEvent(values$df, {values$df_fit <- values$df} ) # if values$df changes, re-do the fitting. When layouts are updated this will trigger unnecessary re-fitting, but the fitting is fast enough that the extra computations are worth the added simplicty of doing it this way
@@ -518,6 +481,7 @@ server <- function(session, input, output) {
         })
     
     observeEvent( {input$show_BIC_plot
+                    input$show_best_fits
                     input$trim_ends}, {
         model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") # doesn't need to be in the server or this observer but is fast enough to justify, since it makes the next step clearer
         model_name_true <- reactive({model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)]})
@@ -542,8 +506,6 @@ server <- function(session, input, output) {
     },
     options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
     
-
-    
     # display the model plot, with all  comonents.
     ## choose the best model
     output$show_BIC_plot_button <- renderUI({
@@ -552,14 +514,11 @@ server <- function(session, input, output) {
                      p("Display/update plot with fits for all selected models.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),  width = '100%')
     })
     
-    # # make the Rshiny visualized version of the hit-calling plot
-    # output$model_plot_all <- renderPlot({
-    #     plot_all_fits_shiny(values$df_models_p , values$df_BIC_models_p )
-    # })
-    # 
-    # output$model_plot_chosen <- renderPlot({
-    #     plot_best_fits_shiny(values$df_models_p, values$df_BIC_best)
-    # })
+    output$show_best_fits_button <- renderUI({
+        req(values$df)
+        actionButton("show_best_fits", 
+                     p("Plot selected fits", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),  width = '100%')
+    })
     
     output$best_model_table <- DT::renderDataTable( {
         tryCatch({
@@ -578,24 +537,24 @@ server <- function(session, input, output) {
                 full_join(values$fit_sel) %>%
                 arrange(condition, well) 
             
-            #write_rds(values$df_BIC_best, "../4_analyze/values_df_BIC_best_post_click.rds")
             values$df_BIC_display <<- values$df_BIC_best %>%
-                mutate(`best model` = recode(which_model,
+                mutate(`selected fit` = recode(which_model,
                                              s1_pred = "Fit 1",
                                              s1_d_pred = "Fit 2",
                                              s2_pred = "Fit 3",
                                              s2_d_pred = "Fit 4")) %>%
-                select(c(well, condition, `best model`))
+                select(c(well, condition, `selected fit`)) 
+            
             values$df_BIC_display # this will render in the table  
         }, error = function(e) {
             
             values$df_BIC_display <<- values$df_BIC_best %>%
-                mutate(`best model` = recode(which_model,
+                mutate(`selected fit` = recode(which_model,
                                              s1_pred = "Fit 1",
                                              s1_d_pred = "Fit 2",
                                              s2_pred = "Fit 3",
                                              s2_d_pred = "Fit 4")) %>%
-                select(c(well, condition, `best model`))
+                select(c(well, condition, `selected fit`)) 
             values$df_BIC_display # this will render in the table 
             
         })
