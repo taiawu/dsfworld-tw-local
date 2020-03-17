@@ -506,9 +506,9 @@ server <- function(session, input, output) {
         values$df_BIC_models_p <- values$df_BIC_models_filt %>%
             cond_df_BIC_for_plot(  ) # adds is_min #readRDS("../4_analyze/values_df__BIC_models.rds")
 
-        values$df_BIC_best <-  cond_df_BIC_for_plot ( values$df_BIC_models_filt   ) %>%
-            filter(is_min == TRUE) %>%
-            select(c(well, condition, which_model))
+        # values$df_BIC_best <-  cond_df_BIC_for_plot ( values$df_BIC_models_filt   ) %>%
+        #     filter(is_min == TRUE) %>%
+        #     select(c(well, condition, which_model))
     })
     
     # render the model table

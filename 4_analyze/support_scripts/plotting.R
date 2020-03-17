@@ -274,7 +274,7 @@ plot_best_fits_shiny <- function(df_models, df_best_in) {
     alpha = 0.5) +
     geom_text (data = df_best, 
                aes(label = paste0("Selected: ", best_model_human), # BIC values for fits
-                   x = 50,
+                   x = mid_temp,
                    y = 1.3,
                    group = well),
                size = 3) +
