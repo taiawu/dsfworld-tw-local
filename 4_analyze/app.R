@@ -431,6 +431,10 @@ server <- function(session, input, output) {
             # write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
             # write_rds(values$df_tm_models, "values_df_tm_models.rds")
             # write_rds(values$df_models, "values_df_models.rds")
+                        write_rds(values$s1_list, "values_s1_list.rds")
+                        write_rds(values$s1_d_list, "values_s1_d_list.rds")
+                        write_rds(values$s2_list, "values_s2_list.rds")
+                        write_rds(values$s2_d_list, "values_s2_d_list.rds")
             
             #update the tm table for display df_tm_models_table <- df_tm_models %>%
             model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") # doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
@@ -471,18 +475,18 @@ server <- function(session, input, output) {
     }, {
         model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") # doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
         model_name_true <- reactive({model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)]})
-        
-        values$df_models_filt <- values$df_models %>% dplyr::filter(which_model %in% model_name_true()) 
-        values$df_BIC_models_filt <- values$df_BIC_models %>% dplyr::filter(which_model %in% model_name_true()) 
-        
-        values$df_models_p <- cond_df_model_for_plot( values$df_models_filt, values$df_BIC_models_filt  ) 
-        
+
+        values$df_models_filt <- values$df_models %>% dplyr::filter(which_model %in% model_name_true())
+        values$df_BIC_models_filt <- values$df_BIC_models %>% dplyr::filter(which_model %in% model_name_true())
+
+        values$df_models_p <- cond_df_model_for_plot( values$df_models_filt, values$df_BIC_models_filt  )
+
         values$df_BIC_models_p <- values$df_BIC_models_filt %>%
             cond_df_BIC_for_plot (  ) # adds is_min #readRDS("../4_analyze/values_df__BIC_models.rds")
-        
+
         values$df_BIC_best <-  cond_df_BIC_for_plot ( values$df_BIC_models_filt   ) %>%
             filter(is_min == TRUE) %>%
-            select(c(well, condition, which_model)) 
+            select(c(well, condition, which_model))
     })
     
     # render the model table

@@ -162,7 +162,6 @@ plotDownload <- function(input, output, session, plotFun) { #https://github.com/
 
 
 ######## determination of Tm by dRFU
-
 ##the fitting functions
 sgfilt_set_n <- function(n_) { # a closure to set the sg filter length, which will be based on the length of the input data
   function(data, m_) {
