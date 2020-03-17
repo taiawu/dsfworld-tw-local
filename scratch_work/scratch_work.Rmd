@@ -651,16 +651,26 @@ source("../4_analyze/support_scripts/plotting.R")
 source("../4_analyze/support_scripts/analysis.R")
 ```
 
+
 ```{r}
 # this is the input, predefined
+# full lists, don't need these
+# s2_list <- readRDS("../4_analyze/values_s2_list.rds")
+# s2_d_list <- readRDS("../4_analyze/values_s2_d_list.rds")
+# s1_list <- readRDS("../4_analyze/values_s1_list.rds")
+# s1_d_list <- readRDS("../4_analyze/values_s1_d_list.rds")
+
+# the model dfs, from which the data we get the tms from will come
 df_models <- readRDS("../4_analyze/values_df_models.rds")
 
-# these closures will be assigned at the time
-sample_data <- by_component_s1  %>% unnest(data) 
+# # the tm table whose format we should copy
+# df_tm <- readRDS("../4_analyze/values_df_tm_models.rds")
+# df_tm 
 
-low_T <- min(sample_data$Temperature)
-high_T <- max(sample_data$Temperature)
-n_meas <- sample_data$Temperature %>% unique() %>% length()
+# these closures will be assigned at the time
+low_T <- min(df_models$Temperature)
+high_T <- max(df_models$Temperature)
+n_meas <- df_models$Temperature %>% unique() %>% length()
 
             
  n2r <<- make_temp_n2r(range(low_T:high_T)) #
@@ -670,6 +680,115 @@ n_meas <- sample_data$Temperature %>% unique() %>% length()
  sgfilt_nest <<- sgfilt_set_n(n_ = find_sgolay_width( win3d ))
  
 ```
+
+```{r}
+# function to calculate the Tm by dRFU for the models--different only in the input formats for the function. ideally would be merged with the dRFU Tma function.
+Tm_by_dRFU_for_model <- function( data ) {
+  df <- tibble( x = data$Temperature, 
+                y = data$sgd1_pred)
+  
+  grid <- tibble( x = seq(min(df$x), max(df$x), by = 0.1) ) %>% modelr::add_predictions(loess(y ~ x, data = df, span = 0.1))
+  
+  tma <- grid$x[which(grid$pred == max(grid$pred))]
+  
+  tma # the apparent Tm from the first derivative
+}
+
+mean_no_NaN <- function( vec ) {
+  a <- mean(vec, na.rm = TRUE)
+  
+  if( is.nan(a) == TRUE) {
+    a <- NA
+  }
+  a
+}
+
+get_condition <- function(data) {
+  data$condition %>% unique()
+}
+```
+
+```{r}
+model_tms_by_dRFU <- function( df_models, win3d ) {
+  df_pred_sgd1 <- df_models  %>% # the model outcomes, with sgd1 added for all predictions within the nested data
+                  group_by(well, which_model, component)  %>%
+                  mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
+                  nest() %>%
+                  mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector())
+  
+  df_tma <- df_pred_sgd1 %>% # all calculated temperatures, with the rest of the data now removed
+                  mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector()) %>%
+                  ungroup() %>%
+                  mutate(condition = map(data, get_condition) %>% as_vector()) %>%
+                  select(-data) %>%
+                  dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
+                  pivot_wider(names_from = component, values_from  = tma)  %>%
+                  group_by(condition, which_model) %>%
+                  mutate(mean_tma1 = mean_no_NaN(sigmoid_1) %>% round(1),
+                         mean_tma2 = mean_no_NaN(sigmoid_2) %>% round(1),
+                         sd_tma1 = sd(sigmoid_1) %>% round(1),
+                         sd_tma2 = sd(sigmoid_2) %>% round(1)) 
+  
+  df_tma_mean <- df_tma %>% # the mean tmas only, for downloading and displaying
+                  distinct(mean_tma1, mean_tma2, .keep_all = TRUE) %>%
+                  ungroup() %>%
+                  dplyr::select(c(condition, mean_tma1, sd_tma1, mean_tma2, sd_tma2))
+
+  out <- list("df_pred_sgd1" = df_pred_sgd1,
+              "df_tma" = df_tma,
+              "df_tma_mean" = df_tma_mean)
+}
+```
+
+```{r}
+df_models <- readRDS("../4_analyze/values_df_models.rds")
+
+df_mod_tm <- model_tms_by_dRFU( df_models, win3d )  # implement it in this line 
+
+df_mod_tm
+```
+
+
+```{r}
+df_models_tma # with data, now including sgd1
+df_mod_tma # all values
+df_mod_mean_only # just the menas, for visualization
+```
+
+
+
+```{r}
+df_models <- readRDS("../4_analyze/values_df_models.rds")
+
+df_models_tma <- df_models  %>%
+                  group_by(well, which_model, component)  %>%
+                  mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
+                  nest() %>%
+                  mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector())
+
+df_models_tma
+
+df_mod_tma <- df_models_tma %>%
+          ungroup() %>%
+          mutate(condition = map(data, get_condition) %>% as_vector()) %>%
+          #mutate(condition = rep("cond1", times = 36)) %>% ## WILL ALREADY BE ADDED FORM THE LAOUT ??
+          select(-data) %>%
+          dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
+          pivot_wider(names_from = component, values_from  = tma)  %>%
+          group_by(condition, which_model) %>%
+          mutate(mean_tma1 = mean_no_NaN(sigmoid_1) %>% round(1),
+                 mean_tma2 = mean_no_NaN(sigmoid_2) %>% round(1),
+                 sd_tma1 = sd(sigmoid_1) %>% round(1),
+                 sd_tma2 = sd(sigmoid_2) %>% round(1)) 
+df_mod_tma
+df_mod_mean_only <- df_mod_tma %>%
+                    distinct(mean_tma1, mean_tma2, .keep_all = TRUE) %>%
+                    dplyr::select(c(condition, mean_tma1, sd_tma1, mean_tma2, sd_tma2))
+
+df_mod_mean_only
+```
+
+
 
 
 
@@ -697,16 +816,7 @@ on_sgd1
 
 
 ```{r}
-Tm_by_dRFU_for_model <- function( data ) {
-  df <- tibble( x = data$Temperature, 
-                y = data$sgd1_pred)
-  
-  grid <- tibble( x = seq(min(df$x), max(df$x), by = 0.1) ) %>% modelr::add_predictions(loess(y ~ x, data = df, span = 0.1))
-  
-  tma <- grid$x[which(grid$pred == max(grid$pred))]
-  
-  tma # the apparent Tm from the first derivative
-}
+
 
 by_component_s1 <- s1_list$df_models %>% 
   group_by(well, component) %>%
@@ -724,6 +834,8 @@ df_models_tma <- df_models  %>%
    mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
    nest() %>%
   mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector())
+
+df_models_tma 
 ```
 ```{r}
 mean_no_NaN <- function( vec ) {

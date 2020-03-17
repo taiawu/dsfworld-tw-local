@@ -427,14 +427,14 @@ server <- function(session, input, output) {
                     values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_d_list$df_BIC)
                     values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_d_list$tm_table_models)
                 }}
+            write_rds(values$df_models, "values_df_models.rds")
+            write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
+            write_rds(values$df_tm_models, "values_df_tm_models.rds")
             # write_rds(values$df_models, "values_df_models.rds")
-            # write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
-            # write_rds(values$df_tm_models, "values_df_tm_models.rds")
-            # write_rds(values$df_models, "values_df_models.rds")
-                        write_rds(values$s1_list, "values_s1_list.rds")
-                        write_rds(values$s1_d_list, "values_s1_d_list.rds")
-                        write_rds(values$s2_list, "values_s2_list.rds")
-                        write_rds(values$s2_d_list, "values_s2_d_list.rds")
+            # write_rds(values$s1_list, "values_s1_list.rds")
+            # write_rds(values$s1_d_list, "values_s1_d_list.rds")
+            # write_rds(values$s2_list, "values_s2_list.rds")
+            # write_rds(values$s2_d_list, "values_s2_d_list.rds")
             
             #update the tm table for display df_tm_models_table <- df_tm_models %>%
             model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") # doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
