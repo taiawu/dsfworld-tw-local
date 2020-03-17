@@ -739,72 +739,136 @@ make_model_plot_sel <- function(df_models, df_BIC, fit_vars, show_models, df_min
     scale_color_viridis_c()
 }
 
-
-get_Tms <- function(model_df, model) {
-  pars <- model_df %>%
-    unnest_legacy(model_pars) %>%
-    dplyr::filter(grepl('xmid', term)) %>%
-    mutate( tma = map(estimate, n2r) %>% 
-              as_vector() %>%
-              round( digits = 1) ) %>%
-    select(well, condition, term, tma) %>% # 20200310
-    #select(well,  term, tma) %>%
-    plyr::mutate(which_model = rep(model, nrow(.)))
-  #pivot_wider(names_from = term, values_from = tma)
+## Tma from model fits
+# function to calculate the Tm by dRFU for the models--different only in the input formats for the function. ideally would be merged with the dRFU Tma function.
+Tm_by_dRFU_for_model <- function( data ) {
+  df <- tibble( x = data$Temperature, 
+                y = data$sgd1_pred)
+  
+  grid <- tibble( x = seq(min(df$x), max(df$x), by = 0.1) ) %>% modelr::add_predictions(loess(y ~ x, data = df, span = 0.1))
+  
+  tma <- grid$x[which(grid$pred == max(grid$pred))]
+  
+  tma # the apparent Tm from the first derivative
 }
 
-make_model_tm_table <- function( model_tms) {
-  # for the s1 models, add a dummy xmid2 column. clunkly, i know, but a simple fix
-  if (!"xmid2" %in% names(model_tms)) { model_tms <- model_tms %>%  plyr::mutate(xmid2 = rep(NA, nrow(.)))}
+mean_no_NaN <- function( vec ) {
+  a <- mean(vec, na.rm = TRUE)
   
-  if ("condition" %in% names(model_tms)) {
-    # make the averaged table
-    tm_table_models <- model_tms %>%
-      select(condition, which_model, xmid, xmid2) %>%
-      group_by(condition, which_model)   %>%
-      summarise( mean_xmid1 = mean(xmid) ,
-                 sd_xmid1 = sd(xmid),
-                 mean_xmid2 = mean(xmid2) ,
-                 sd_xmid2 = sd(xmid2)) %>%
-      mutate_if(is.numeric, round, 2) %>%
-      ungroup()
-    
-  } else {
-    tm_table_models <- model_tms %>%
-      select(well, which_model, xmid, xmid2) %>%
-      group_by(well, which_model)   %>%
-      summarise( mean_xmid1 = mean(xmid) ,
-                 sd_xmid1 = sd(xmid),
-                 mean_xmid2 = mean(xmid2) ,
-                 sd_xmid2 = sd(xmid2)) %>%
-      mutate_if(is.numeric, round, 2) %>%
-      ungroup()
+  if( is.nan(a) == TRUE) {
+    a <- NA
   }
-  
-  # tm_table_models <- tm_table_models %>%
-  #         # mutate( which_model = grep_and_gsub(.$which_model, c("s1", "s1_d", "s2","s2_d"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
-  #         #                set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
-  #         discard(~all(is.na(.x))) # get rid of any all-NA colmns
-  
-  tm_table_models
+  a
 }
 
-model_all <- function(which_model, model_name, start_pars) {
+get_condition <- function(data) {
+  data$condition %>% unique()
+}
+
+add_sig2_col <- function( data ) {
+  if ("sigmoid_2" %in% names(data)) {
+    data
+  } else {
+    data %>%
+      mutate(sigmoid_2 = map(.$sigmoid_1, function(x) {NA}) %>% as_vector())
+  }
+}
+
+
+model_tms_by_dRFU <- function( df_models, win3d ) {
+  df_pred_sgd1 <- df_models  %>% # the model outcomes, with sgd1 added for all predictions within the nested data
+    group_by(well, which_model, component)  %>%
+    mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
+    nest() %>%
+    mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector())
+  
+  df_tma <- df_pred_sgd1 %>% # all calculated temperatures, with the rest of the data now removed
+    mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector()) %>%
+    ungroup() %>%
+    mutate(condition = map(data, get_condition) %>% as_vector()) %>%
+    select(-data) %>%
+    dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
+    pivot_wider(names_from = component, values_from  = tma)  %>%
+    group_by(condition, which_model) %>%
+    add_sig2_col() %>% # if the sigmoid_2 column is missing, add in an empty one for it 
+    mutate(mean_tma1 = mean_no_NaN(sigmoid_1) %>% round(1),
+           mean_tma2 = mean_no_NaN(sigmoid_2) %>% round(1),
+           sd_tma1 = sd(sigmoid_1) %>% round(1),
+           sd_tma2 = sd(sigmoid_2) %>% round(1)) 
+  
+  df_tma_mean <- df_tma %>% # the mean tmas only, for downloading and displaying
+    distinct(mean_tma1, mean_tma2, .keep_all = TRUE) %>%
+    ungroup() %>%
+    dplyr::select(c(condition, which_model, mean_tma1, sd_tma1, mean_tma2, sd_tma2))
+  
+  out <- list("df_pred_sgd1" = df_pred_sgd1,
+              "df_tma" = df_tma,
+              "df_tma_mean" = df_tma_mean)
+}
+
+
+# get_Tms <- function(model_df, model) {
+#   pars <- model_df %>%
+#     unnest_legacy(model_pars) %>%
+#     dplyr::filter(grepl('xmid', term)) %>%
+#     mutate( tma = map(estimate, n2r) %>% 
+#               as_vector() %>%
+#               round( digits = 1) ) %>%
+#     select(well, condition, term, tma) %>% # 20200310
+#     #select(well,  term, tma) %>%
+#     plyr::mutate(which_model = rep(model, nrow(.)))
+#   #pivot_wider(names_from = term, values_from = tma)
+# }
+
+# make_model_tm_table <- function( model_tms) {
+#   # for the s1 models, add a dummy xmid2 column. clunkly, i know, but a simple fix
+#   if (!"xmid2" %in% names(model_tms)) { model_tms <- model_tms %>%  plyr::mutate(xmid2 = rep(NA, nrow(.)))}
+#   
+#   if ("condition" %in% names(model_tms)) {
+#     # make the averaged table
+#     tm_table_models <- model_tms %>%
+#       select(condition, which_model, xmid, xmid2) %>%
+#       group_by(condition, which_model)   %>%
+#       summarise( mean_xmid1 = mean(xmid) ,
+#                  sd_xmid1 = sd(xmid),
+#                  mean_xmid2 = mean(xmid2) ,
+#                  sd_xmid2 = sd(xmid2)) %>%
+#       mutate_if(is.numeric, round, 2) %>%
+#       ungroup()
+#     
+#   } else {
+#     tm_table_models <- model_tms %>%
+#       select(well, which_model, xmid, xmid2) %>%
+#       group_by(well, which_model)   %>%
+#       summarise( mean_xmid1 = mean(xmid) ,
+#                  sd_xmid1 = sd(xmid),
+#                  mean_xmid2 = mean(xmid2) ,
+#                  sd_xmid2 = sd(xmid2)) %>%
+#       mutate_if(is.numeric, round, 2) %>%
+#       ungroup()
+#   }
+#   
+#   tm_table_models
+# }
+
+model_all <- function(which_model, model_name, start_pars, win3d) {
   
   model_fit <- start_pars %>% fit_model_from_pars(which_model = which_model)
   
   df_BIC <- extract_model_element(model_fit, "glance", "BIC", model_name) # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
 
-  # df_models <- rbind( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
-  #                     build_predictions(model_name, model_fit) )
   df_models <- bind_rows( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
                       build_predictions(model_name, model_fit) )
-  
-  tm_table_models <- get_Tms(model_fit, model_name) %>%  # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
-                      pivot_wider(names_from = term, values_from = tma) %>%
-                      make_model_tm_table()
-  
-  out_list <- list("model" = model_fit, "df_BIC" = df_BIC, "df_models" = df_models, "tm_table_models" = tm_table_models)
+
+  tm_table_models <- model_tms_by_dRFU( df_models, win3d )
+
+  out_list <- list("model" = model_fit, 
+                   "df_BIC" = df_BIC, 
+                   "df_models" = df_models, 
+                   "tm_table_models" = tm_table_models$df_tma_mean,
+                   "tm_models_all" = tm_table_models$df_tma,
+                   "df_models_sgd1" = tm_table_models$df_pred_sgd1
+                   )
 }
 
 
@@ -958,28 +1022,3 @@ facet_func2 <- function(df,
   
   p
 }
-
-
-# #### plot the models
-# plot_all_fits <- function(df_models, df_BIC, index_range) {
-#   df_BIC_p <- df_BIC  
-#   # %>%
-#   #             dplyr::filter(index %in% index_range)
-#   
-#   df_models %>%
-#     #dplyr::filter(index %in% index_range) %>%
-#     pivot_longer(-c(index, Temperature_norm, which_model, component, BIC), names_to = "which_value", values_to = "value") %>%
-#     
-#     ggplot() +
-#     geom_line(aes(x = Temperature_norm, y = value, linetype = which_value, color = component, group = interaction(which_model, component, which_value)), alpha = 0.5) +
-#     theme_void()+
-#     geom_text(data = df_BIC_p, aes(label = paste0("BIC ", round(BIC, 0)),
-#                                    x = 0.5,
-#                                    y = 1.3,
-#                                    group = index,
-#                                    alpha = is_min),
-#               size = 3) +
-#     scale_alpha_manual(values = c(0.3, 1)) +
-#     scale_color_manual(values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"))+
-#     facet_grid(index~which_model) 
-# }

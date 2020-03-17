@@ -375,7 +375,7 @@ server <- function(session, input, output) {
         
         # first, fit the s1 model
         # this will over-write the summary dataframes, re-setting the models to follow
-        values$s1_list <- model_all(s1_model, "s1_pred", values$start_pars)
+        values$s1_list <- model_all(s1_model, "s1_pred", values$start_pars, win3d)
         values$df_models <- values$s1_list$df_models
         values$df_BIC_models <- values$s1_list$df_BIC
         values$df_tm_models <- values$s1_list$tm_table_models
@@ -405,7 +405,7 @@ server <- function(session, input, output) {
             # fit any newly requested models
             if (input$s1_d == TRUE) { # if the button for a model is clicked
                 if ("s1_d_pred" %in% values$df_models$which_model == FALSE) { # if it hasn't already been fit, then fit it and append the values to the summary tibbles
-                    values$s1_d_list <- model_all(s1_d_model, "s1_d_pred", values$start_pars)
+                    values$s1_d_list <- model_all(s1_d_model, "s1_d_pred", values$start_pars, win3d)
                     values$df_models <- values$df_models %>% bind_rows(values$s1_d_list$df_models)
                     values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s1_d_list$df_BIC)
                     values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s1_d_list$tm_table_models)
@@ -413,7 +413,7 @@ server <- function(session, input, output) {
             
             if (input$s2 == TRUE) {
                 if ("s2_pred" %in% values$df_models$which_model == FALSE) {
-                    values$s2_list <- model_all(s2_model, "s2_pred", values$start_pars)
+                    values$s2_list <- model_all(s2_model, "s2_pred", values$start_pars, win3d)
                     values$df_models <- values$df_models %>% bind_rows(values$s2_list$df_models)
                     values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_list$df_BIC)
                     values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_list$tm_table_models)
@@ -422,14 +422,14 @@ server <- function(session, input, output) {
             
             if (input$s2_d == TRUE) {
                 if ("s2_d_pred" %in% values$df_models$which_model == FALSE) {
-                    values$s2_d_list <- model_all(s2_d_model, "s2_d_pred", values$start_pars)
+                    values$s2_d_list <- model_all(s2_d_model, "s2_d_pred", values$start_pars, win3d)
                     values$df_models <- values$df_models %>% bind_rows(values$s2_d_list$df_models)
                     values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_d_list$df_BIC)
                     values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_d_list$tm_table_models)
                 }}
-            write_rds(values$df_models, "values_df_models.rds")
-            write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
-            write_rds(values$df_tm_models, "values_df_tm_models.rds")
+            # write_rds(values$df_models, "values_df_models.rds")
+            # write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
+            # write_rds(values$df_tm_models, "values_df_tm_models.rds")
             # write_rds(values$df_models, "values_df_models.rds")
             # write_rds(values$s1_list, "values_s1_list.rds")
             # write_rds(values$s1_d_list, "values_s1_d_list.rds")

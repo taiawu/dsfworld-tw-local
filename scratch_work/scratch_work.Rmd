@@ -706,7 +706,51 @@ mean_no_NaN <- function( vec ) {
 get_condition <- function(data) {
   data$condition %>% unique()
 }
+
+add_sig2_col <- function( data ) {
+  if ("sigmoid_2" %in% names(data)) {
+    data
+  } else {
+    data %>%
+      mutate(sigmoid_2 = map(.$sigmoid_1, function(x) {NA}) %>% as_vector())
+  }
+}
 ```
+
+
+```{r}
+df_models <- readRDS("../4_analyze/values_df_models.rds")
+
+  df_pred_sgd1 <- df_models  %>% # the model outcomes, with sgd1 added for all predictions within the nested data
+                  group_by(well, which_model, component)  %>%
+                  mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
+                  nest() %>%
+                  mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector())
+  
+  df_tma_s1 <- df_pred_sgd1 %>% # all calculated temperatures, with the rest of the data now removed
+    filter(which_model == "s1_pred") %>%
+    mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector()) %>%
+    ungroup() %>%
+    mutate(condition = map(data, get_condition) %>% as_vector()) %>%
+    select(-data) %>%
+    dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
+    pivot_wider(names_from = component, values_from  = tma)  %>%
+    group_by(condition, which_model) 
+  
+    df_tma <- df_pred_sgd1 %>% # all calculated temperatures, with the rest of the data now removed
+   #filter(which_model == "s1_pred") %>%
+    mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector()) %>%
+    ungroup() %>%
+    mutate(condition = map(data, get_condition) %>% as_vector()) %>%
+    select(-data) %>%
+    dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
+    pivot_wider(names_from = component, values_from  = tma)  %>%
+    group_by(condition, which_model) 
+  
+  df_tma
+   df_tma_s1
+```
+
 
 ```{r}
 model_tms_by_dRFU <- function( df_models, win3d ) {
@@ -724,6 +768,7 @@ model_tms_by_dRFU <- function( df_models, win3d ) {
                   dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
                   pivot_wider(names_from = component, values_from  = tma)  %>%
                   group_by(condition, which_model) %>%
+                  add_sig2_col() %>% # if the sigmoid_2 column is missing, add in an empty one for it 
                   mutate(mean_tma1 = mean_no_NaN(sigmoid_1) %>% round(1),
                          mean_tma2 = mean_no_NaN(sigmoid_2) %>% round(1),
                          sd_tma1 = sd(sigmoid_1) %>% round(1),
@@ -732,7 +777,7 @@ model_tms_by_dRFU <- function( df_models, win3d ) {
   df_tma_mean <- df_tma %>% # the mean tmas only, for downloading and displaying
                   distinct(mean_tma1, mean_tma2, .keep_all = TRUE) %>%
                   ungroup() %>%
-                  dplyr::select(c(condition, mean_tma1, sd_tma1, mean_tma2, sd_tma2))
+                  dplyr::select(c(condition, which_model, mean_tma1, sd_tma1, mean_tma2, sd_tma2))
 
   out <- list("df_pred_sgd1" = df_pred_sgd1,
               "df_tma" = df_tma,
@@ -745,189 +790,9 @@ df_models <- readRDS("../4_analyze/values_df_models.rds")
 
 df_mod_tm <- model_tms_by_dRFU( df_models, win3d )  # implement it in this line 
 
-df_mod_tm
+df_mod_tm_s1 <- model_tms_by_dRFU( df_models %>% filter(which_model == "s1_pred"), win3d )
+df_mod_tm_s1
 ```
-
-
-```{r}
-df_models_tma # with data, now including sgd1
-df_mod_tma # all values
-df_mod_mean_only # just the menas, for visualization
-```
-
-
-
-```{r}
-df_models <- readRDS("../4_analyze/values_df_models.rds")
-
-df_models_tma <- df_models  %>%
-                  group_by(well, which_model, component)  %>%
-                  mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
-                  nest() %>%
-                  mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector())
-
-df_models_tma
-
-df_mod_tma <- df_models_tma %>%
-          ungroup() %>%
-          mutate(condition = map(data, get_condition) %>% as_vector()) %>%
-          #mutate(condition = rep("cond1", times = 36)) %>% ## WILL ALREADY BE ADDED FORM THE LAOUT ??
-          select(-data) %>%
-          dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
-          pivot_wider(names_from = component, values_from  = tma)  %>%
-          group_by(condition, which_model) %>%
-          mutate(mean_tma1 = mean_no_NaN(sigmoid_1) %>% round(1),
-                 mean_tma2 = mean_no_NaN(sigmoid_2) %>% round(1),
-                 sd_tma1 = sd(sigmoid_1) %>% round(1),
-                 sd_tma2 = sd(sigmoid_2) %>% round(1)) 
-df_mod_tma
-df_mod_mean_only <- df_mod_tma %>%
-                    distinct(mean_tma1, mean_tma2, .keep_all = TRUE) %>%
-                    dplyr::select(c(condition, mean_tma1, sd_tma1, mean_tma2, sd_tma2))
-
-df_mod_mean_only
-```
-
-
-
-
-
-```{r}
-        s1_drfu_test <- s1_list$df_models %>% #df_int %>% # add the first derivative Tms
-            plyr::mutate(sgd1 = purrr::map(data, sgfilt_nest, m_ = 1)) #%>% # add the first derivative data
-            #plyr::mutate(dRFU_tma = as_vector(purrr::map2(data, sgd1, Tm_by_dRFU)))
-        
-# add sgd1 column to each prediction 
-# sgd1 = purrr::map(data, sgfilt_nest, m_ = 1)
-by_component_s1 <- s1_list$df_models %>% 
-  group_by(well, component) %>%
-  mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
-  nest() 
-
-by_component_s1 
-
-on_sgd1 <- by_component_s1 %>%
-  dplyr::filter(well == "A1") %>%
-  unnest(sgd1)
-on_sgd1
-```
-
-
-
-
-```{r}
-
-
-by_component_s1 <- s1_list$df_models %>% 
-  group_by(well, component) %>%
-  mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
-  nest() %>%
-  mutate(tma1 = map(data, Tm_by_dRFU_for_model) %>% as_vector())
-
-by_component_s1 
-```
-# for full models
-```{r}
-df_models <- readRDS("../4_analyze/values_df_models.rds")
-df_models_tma <- df_models  %>%
-  group_by(well, which_model, component)  %>%
-   mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
-   nest() %>%
-  mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector())
-
-df_models_tma 
-```
-```{r}
-mean_no_NaN <- function( vec ) {
-  a <- mean(vec, na.rm = TRUE)
-  
-  if( is.nan(a) == TRUE) {
-    a <- NA
-  }
-  a
-}
-
-df_mod_tma <- df_models_tma %>%
-          ungroup() %>%
-  mutate(condition = map(data, get_condition) %>% as_vector()) %>%
-          #mutate(condition = rep("cond1", times = 36)) %>% ## WILL ALREADY BE ADDED FORM THE LAOUT ??
-          select(-data) %>%
-           dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
-           pivot_wider(names_from = component, values_from  = tma)  %>%
-           group_by(condition, which_model) %>%
-          mutate(mean_tma1 = mean_no_NaN(sigmoid_1) %>% round(1),
-                 mean_tma2 = mean_no_NaN(sigmoid_2) %>% round(1),
-                 sd_tma1 = sd(sigmoid_1) %>% round(1),
-                 sd_tma2 = sd(sigmoid_2) %>% round(1)) 
-
-df_mod_mean_only <- df_mod_tma %>%
-                    distinct(mean_tma1, mean_tma2, .keep_all = TRUE)# %>%
-                    #dplyr::select(c(condition, mean_tma1, sd_tma1, mean_tma2, sd_tma2))
-
-df_mod_mean_only
-df_mod_tma
-```
-```{r}
-get_condition <- function(data) {
-  data$condition %>% unique()
-}
-
-df_models_tma %>%
-          ungroup() %>%
-          mutate(condition2 = rep("cond1", times = 36)) %>%
-  mutate(condition2 = map(data, get_condition) %>% as_vector())
-```
-
-
-
-
-
-
-```{r}
-by_component_s1 <- s1_list$df_models %>% 
-  group_by(well, component) %>%
-  nest() 
-
-on_data <- by_component_s1 %>%
-            dplyr::filter(well == "A1") %>%
-            unnest(data)
-
-
-# %>%
-#   mutate(tma1 = map(data, ))
-```
-```{r}
-# sgd1 = purrr::map(data, sgfilt_nest, m_ = 1)
-
-Tm_by_dRFU <- function( data,  sgd1) {
-  df <- tibble( x = data$Temperature, 
-                y = sgd1)
-  
-  grid <- tibble( x = seq(min(df$x), max(df$x), by = 0.1) ) %>% modelr::add_predictions(loess(y ~ x, data = df, span = 0.1))
-  
-  tma <- grid$x[which(grid$pred == max(grid$pred))]
-  
-  tma # the apparent Tm from the first derivative
-}
-
-on_data 
-
-on_data_func <- function( data ) {
-  out <- data$pred %>% max()
-}
-
-out_data <- on_data_func(on_data )
-
-out_data
-
-by_component_s1 %>%
-  mutate(tma1 = map(data, on_data_func) %>% as_vector())
-```
-
-
-
-
-
 
 
 
