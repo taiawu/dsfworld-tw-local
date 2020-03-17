@@ -175,8 +175,15 @@ ui <- navbarPage( useShinyalert(),
                                                                        plotDownloadUI("plot1"), 
                                                                        textInput("plot_download_name", "Downloaded plot name", value = "dsfworld_plot")
                                                            ),
-                                                           plotOutput("plot", height = "auto",  dblclick = "plot_dblclick") %>% withSpinner(color="#525252"), style = ("overflow-y:scroll; max-height: 600px") 
-                                                       ), width = 7)
+                                                           #plotOutput("plot", height = "auto",  dblclick = "plot_dblclick") %>% withSpinner(color="#525252"), style = ("overflow-y:scroll; max-height: 600px") 
+                                                           plotOutput("plot", 
+                                                                      height = "auto", 
+                                                                      dblclick = dblclickOpts(
+                                                                          id = "plot_dblclick")) %>% 
+                                                                      withSpinner(color="#525252"), style = ("overflow-y:scroll; max-height: 600px"),
+                                                           verbatimTextOutput("dblclick_info")
+
+                                                       ), width = 7)  
                                                )
                                       )
                           )) # end tabset Panel (contains all "analysis sub-panels)
@@ -264,20 +271,25 @@ server <- function(session, input, output) {
     output$plot <- renderPlot({ # is there a way to implement renderCachedPlot that would be worthwhile here?
         chosen_plot()
     }, height = function() 
+        #{
         if (values$plot_chosen == "initial") { 400 # the initial plot has a 400 px height
-         } else {
-             if (input$facet == "none") {
-                 height <- 400  # the initial plot has a 400 px height
-             } else {
-                 # adapted from https://github.com/rstudio/shiny/issues/650
-                 h_dyn <- gg_facet_nrow_ng(chosen_plot()) * ((session$clientData$output_plot_width-100)/(gg_facet_ncol_ng(chosen_plot())))*(1/1.618)
-                 if ( h_dyn < session$clientData$output_plot_width * (1/1.618) ) { # if the calulcated height fits within the screen
-                     height <- session$clientData$output_plot_width * (1/1.618) # if the calulcated height fits within the screen
-                 } else { height <- h_dyn
-                 }
-             }
-             height
+        } else {
+            if (input$facet == "none") {
+                height <- 400  # the initial plot has a 400 px height
+            } else {
+                # adapted from https://github.com/rstudio/shiny/issues/650
+                h_dyn <- gg_facet_nrow_ng(chosen_plot()) * ((session$clientData$output_plot_width-100)/(gg_facet_ncol_ng(chosen_plot())))*(1/1.618)
+                if ( h_dyn < session$clientData$output_plot_width * (1/1.618) ) { # if the calulcated height fits within the screen
+                    height <- session$clientData$output_plot_width * (1/1.618) # if the calulcated height fits within the screen
+                } else { height <- h_dyn }
+            }
+            height
          }
+    # }, dblclick = function() {
+    #     if (values$plot_chosen == "all_model") {
+    #         "plot_dblclick"
+    #     } 
+    # }
     )
     
     output$final_plot <- renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
@@ -523,7 +535,7 @@ server <- function(session, input, output) {
     output$best_model_table <- DT::renderDataTable( {
         tryCatch({
             values$fit_sel <-  subset(
-                nearPoints(values$df_BIC_models_p,
+                nearPoints(values$df_models_p, #values$df_BIC_models_p,
                            input$plot_dblclick,
                            threshold = 1000, # set large,so anywhere in the plot area will work 
                            allRows = TRUE),
