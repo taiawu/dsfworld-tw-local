@@ -67,14 +67,12 @@ ui <- navbarPage( useShinyalert(),
 # Define server logic required to draw a histogram
 server <- function(session, input, output) {
     values <- reactiveValues() 
-    values$r_table_update <- 1 # initialize the r_table update counter
-    
     ## just in the layout standalone
     values$data_raw <- df_sample
+    output$df_struc_print <- renderPrint({ str(values$df) }) # this is used only the applet, to print out the structures
+ 
     
-    output$df_layout_table <- DT::renderDataTable({ values$df %>% select(-data) })
-    output$df_struc_print <- renderPrint({ str(values$df) })
-    
+####### begin 2_layouts applet server   ##### 
 ####### basic data formatting post-upload
     observeEvent(values$data_raw, { # ultimately, observe the transfer to the analysis page
         print("observe2")
@@ -96,6 +94,9 @@ server <- function(session, input, output) {
 ########## End render GUI elements for the analysis page ######
     
 ####### begin layout handling and updating
+    values$r_table_update <- 1 # initialize the r_table update counter
+    output$df_layout_table <- DT::renderDataTable({ values$df %>% select(-data) })
+
     # GUI elements
     output$handson_update_button <- renderUI({ # for layout
         req(values$df)
@@ -164,7 +165,7 @@ server <- function(session, input, output) {
             
            
         })
-####### end layout handling and updating
+  ### end 2_layouts applet server
     
 } # end server
 # Run the application 
