@@ -17,7 +17,7 @@ source("support_scripts/analysis.R")
 library(shinyalert) # pop-up error messages
 library(shinycssloaders) # spinning plot loading icon
 library(rhandsontable) # user-interactive tables 
-library(shiny) # for shiny web-apps 
+library(shiny) # for shiny web-apps
 
 named_mods <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") %>%
     set_names("Fit 1", "Fit 2", "Fit 3", "Fit 4")
@@ -79,9 +79,9 @@ ui <- navbarPage( useShinyalert(),
                                                        bsCollapse(id = "tm_table", open = "Panel 2",
                                                                   bsCollapsePanel(p("Find apparent Tms", style = "font-family: 'Avenir Next'; font-size: 16px; color: black",align = "center"),
                                                                                   bsCollapsePanel(p("By dRFU", style = "font-family: 'Avenir Next'; font-size: 14px; color: black",align = "center"),
-                                                                                                  checkboxInput("show_Tm_dRFU", "Show Tm' on plot", FALSE),
-                                                                                                  checkboxInput("show_Tm_dRFU_colors", "Apply colors  to Tm'", FALSE),
                                                                                                   DT::dataTableOutput("tm_table_render"), #style = "height:400px;"
+                                                                                                  p("-----", style = "font-family: 'Avenir Next'; font-size: 10px; color: white",align = "center"),
+                                                                                                  downloadButton('download_dRFU_tma', "Download Tmas by dRFU"),
                                                                                                   style = "default"
                                                                                   ),
                                                                                   
@@ -123,11 +123,12 @@ ui <- navbarPage( useShinyalert(),
                                                                                                   
                                                                                                      
                                                                                                       DT::dataTableOutput("tm_table_render_models"), #style = "height:400px;"
+                                                                                                  p("-----", style = "font-family: 'Avenir Next'; font-size: 10px; color: white",align = "center"),
+                                                                                                  downloadButton('download_fit_tma', "Download Tmas from fits"),
                                                                                                   p("-----", style = "font-family: 'Avenir Next'; font-size: 30px; color: white",align = "center"),
                                                                                                   uiOutput("trim_ends"),  
-
                                                                                                   p(" ", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
-                                                                                                  bsCollapsePanel(p("Make all fits plot: view and select models for each condition", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
+                                                                                                  bsCollapsePanel(p("Select the best fit for each dataset", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                                   #p("Click 'Plot model comparision' below to display the four models side-by-side. Use this plot to select the best model for each condition. ", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                                   uiOutput("show_BIC_plot_button"),
                                                                                                                   DT::dataTableOutput("best_model_table"),
@@ -171,10 +172,10 @@ ui <- navbarPage( useShinyalert(),
                                                            id = "facet_plot_re_examined",
                                                            
                                                            tags$style(HTML('#q1 {margin-top: 30px}')),
-                                                           splitLayout(cellWidths = c("20%", "80%"), 
-                                                                       plotDownloadUI("plot1"), 
-                                                                       textInput("plot_download_name", "Downloaded plot name", value = "dsfworld_plot")
-                                                           ),
+                                                           downloadButton('download_plot', "Download plot"),
+                                                           # splitLayout(cellWidths = c("20%", "80%"), 
+                                                           #             plotDownloadUI("plot1"), 
+                                                           #             textInput("plot_download_name", "Downloaded plot name", value = "dsfworld_plot")),
                                                            #plotOutput("plot", height = "auto",  dblclick = "plot_dblclick") %>% withSpinner(color="#525252"), style = ("overflow-y:scroll; max-height: 600px") 
                                                            plotOutput("plot", 
                                                                       height = "auto", 
@@ -285,11 +286,6 @@ server <- function(session, input, output) {
             }
             height
          }
-    # }, dblclick = function() {
-    #     if (values$plot_chosen == "all_model") {
-    #         "plot_dblclick"
-    #     } 
-    # }
     )
     
     output$final_plot <- renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
@@ -302,7 +298,13 @@ server <- function(session, input, output) {
                     step = 1)
     }) # trim the ends off of the data to improve fitting
     
-    
+    ## download the plot
+    output$download_plot <- downloadHandler(
+        filename = function() { paste(Sys.Date(), '-dsfworld_plot.pdf', sep='') },
+        content = function(file) {
+            ggsave(file, plot = chosen_plot(), device = "pdf")
+        }
+    )
     
 # tm determination server  ---------------------------  
     observeEvent(values$df, {values$df_fit <- values$df} ) # if values$df changes, re-do the fitting. When layouts are updated this will trigger unnecessary re-fitting, but the fitting is fast enough that the extra computations are worth the added simplicty of doing it this way
@@ -333,7 +335,7 @@ server <- function(session, input, output) {
 
     })
     
-    output$tm_table_render <- DT::renderDataTable({
+    tma_by_dRFU <- reactive({
         req(values$df_tms)
         if( "dRFU_tma" %in% names(values$df_tms)) { # if there are tms to report, render a table
             df <- values$tm_table_dRFU  %>%
@@ -341,9 +343,24 @@ server <- function(session, input, output) {
             
         } else { df <- NULL }
         
-        df 
+        df   
+    })
+    
+    output$tm_table_render <- DT::renderDataTable({
+        req(values$df_tms)
+        tma_by_dRFU()
     },
     options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr')) #scroller = TRUE, dom = 'tr'
+    
+    # download these values
+    output$download_dRFU_tma <- downloadHandler(
+        filename = function() {
+            paste0(Sys.Date(), '-dsfworld_tma_by_dRFU.csv', sep='')
+        },
+        content = function(file) {
+            write.csv(tma_by_dRFU(), file, row.names = FALSE)
+        }
+    )
 
     # ## by model fitting
     # set initial values for smoothing and normalizing
@@ -518,6 +535,16 @@ server <- function(session, input, output) {
     },
     options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
     
+    # download the model tms 
+    output$download_fit_tma <- downloadHandler(
+        filename = function() {
+            paste0(Sys.Date(), '-dsfworld_tma_by_model_fitting.csv', sep='')
+        },
+        content = function(file) {
+            write.csv(values$df_tm_models_table, file, row.names = FALSE)
+        }
+    )
+    
     # display the model plot, with all  comonents.
     ## choose the best model
     output$show_BIC_plot_button <- renderUI({
@@ -573,6 +600,7 @@ server <- function(session, input, output) {
 
 
     }, options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
+    
     
 
 } # end server

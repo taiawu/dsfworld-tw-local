@@ -51,7 +51,6 @@ ui <- fluidPage(
     )
 )
 
-
 server <- function(input, output) {
     output$plot1 <- renderPlot({
         if (input$plot_type == "base") {
