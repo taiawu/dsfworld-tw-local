@@ -221,6 +221,9 @@ server <- function(input, output) {
             )
         }, options = list(scrollX = TRUE, scrollY = 500, scrollCollapse = TRUE, paging = FALSE, dom = 't')
         )
+        
+        
+        ##### end data uploads applet
 }
 
 shinyApp(ui, server)

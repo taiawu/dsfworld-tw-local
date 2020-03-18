@@ -129,7 +129,6 @@ ui <- navbarPage( useShinyalert(),
                                                                                                   uiOutput("trim_ends"),  
                                                                                                   p(" ", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
                                                                                                   bsCollapsePanel(p("Select the best fit for each dataset", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                                  #p("Click 'Plot model comparision' below to display the four models side-by-side. Use this plot to select the best model for each condition. ", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                                   uiOutput("show_BIC_plot_button"),
                                                                                                                   DT::dataTableOutput("best_model_table"),
                                                                                                                   p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
@@ -141,13 +140,6 @@ ui <- navbarPage( useShinyalert(),
                                                                                                                   
                                                                                                                   p("However, you can select a fit manually by double-clicking on the desired fit in the 'All fits' plot.", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
                                                                                                                   uiOutput("show_best_fits_button")
-                                                                                                                  # 
-                                                                                                                  # p("", style = "font-family: 'Avenir Next'; font-size: 8px; color: black",align = "center"),
-                                                                                                                  # 
-                                                                                                                  # p("Or, to change multiple model selections at a time, edit the table below and press 'Apply model selections from table'. ", style = "font-family: 'Avenir Next'; font-size: 10px; color: black",align = "center"),
-                                                                                                                  # uiOutput("apply_handson_models")
-                                                                                                               
-                                                                                                                  
                                                                                                   )
                                                                                   ), style = "default"
                                                                   )
@@ -203,7 +195,6 @@ server <- function(session, input, output) {
 # data layout and handling server --------------------------- 
 
 # plotting server  ---------------------------    
-
     output$update_plot <- renderUI({
         req(values$df)
         actionButton("update_plot", p("Update plot", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),  width = '100%')
@@ -400,15 +391,23 @@ server <- function(session, input, output) {
             n2r <<- make_temp_n2r(range(low_T:high_T)) #
             win3d <<- floor(3/((n2r(1) - n2r(0))/n_meas))
             if ( win3d < 5 ) { win3d <<- 5 }
-            peak_finder_nest <<- make_peak_finder_nest(win3d)
+            peak_finder_nest <<- make_peak_finder_nest( win3d )
             sgfilt_nest <<- sgfilt_set_n(n_ = find_sgolay_width( win3d ))
+            
+            outlist1 <- list(
+                "n2r" = n2r,
+                "win3d" = win3d,
+                "peak_finder_nest" = peak_finder_nest,
+                "sgfilt_nest" = sgfilt_nest
+            )
+            write_rds(outlist1, "outlist1.rds")
         },   
         error = function(e) {
             print("win3 errored! setting win3d to 7")
             n2r <<- make_temp_n2r(range(25:95)) ### REVISIT
             win3d <<- 7
             sgfilt_nest <<- sgfilt_set_n( n_ = find_sgolay_width( 7 ) )
-            peak_finder_nest <<- make_peak_finder_nest(win3d)
+            peak_finder_nest <<- make_peak_finder_nest( win3d )
         })
     }) # write to values
     
@@ -419,6 +418,7 @@ server <- function(session, input, output) {
         # first, fit the s1 model
         # this will over-write the summary dataframes, re-setting the models to follow
         values$s1_list <- model_all(s1_model, "s1_pred", values$start_pars, win3d)
+        values$model_list <- list("s1_list" = values$s1_list)
         values$df_models <- values$s1_list$df_models
         values$df_BIC_models <- values$s1_list$df_BIC
         values$df_tm_models <- values$s1_list$tm_table_models
@@ -428,6 +428,7 @@ server <- function(session, input, output) {
                         plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Fit 1", "Fit 2", "Fit 3", "Fit 4"), c("Other")))  %>% # move this to later, for the for-display table only!
             set_names(c("Condition", "Model", "Tma 1", "Tma 1 SD", "Tma 2", "Tma 2 SD")) %>%          
             discard(~all(is.na(.x))) #%>% # get rid of the columns which are all NA (true if the model is not selected)
+        write_rds(values$df_tm_models_table, "values_df_tm_models_table.rds")
         # write_rds(values$s1_list, "values_s1_list.rds")
         
         # if new data is uploaded, reset all of the buttons as well. perhaps we should set these to watch values$data (unnamed), so it doesn't get over-written by renaming, but i'd need to think more carefully about how to incorporate the names downstream....
@@ -449,6 +450,7 @@ server <- function(session, input, output) {
             if (input$s1_d == TRUE) { # if the button for a model is clicked
                 if ("s1_d_pred" %in% values$df_models$which_model == FALSE) { # if it hasn't already been fit, then fit it and append the values to the summary tibbles
                     values$s1_d_list <- model_all(s1_d_model, "s1_d_pred", values$start_pars, win3d)
+                    values$model_list <- c(values$model_list, "s1_d_list" = values$s1_d_list)
                     values$df_models <- values$df_models %>% bind_rows(values$s1_d_list$df_models)
                     values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s1_d_list$df_BIC)
                     values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s1_d_list$tm_table_models)
@@ -457,6 +459,7 @@ server <- function(session, input, output) {
             if (input$s2 == TRUE) {
                 if ("s2_pred" %in% values$df_models$which_model == FALSE) {
                     values$s2_list <- model_all(s2_model, "s2_pred", values$start_pars, win3d)
+                    values$model_list <- c(values$model_list, "s2_list" = values$s2_list)
                     values$df_models <- values$df_models %>% bind_rows(values$s2_list$df_models)
                     values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_list$df_BIC)
                     values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_list$tm_table_models)
@@ -466,10 +469,12 @@ server <- function(session, input, output) {
             if (input$s2_d == TRUE) {
                 if ("s2_d_pred" %in% values$df_models$which_model == FALSE) {
                     values$s2_d_list <- model_all(s2_d_model, "s2_d_pred", values$start_pars, win3d)
+                    values$model_list <- c(values$model_list, "s2_d_list" = values$s2_d_list)
                     values$df_models <- values$df_models %>% bind_rows(values$s2_d_list$df_models)
                     values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_d_list$df_BIC)
                     values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_d_list$tm_table_models)
                 }}
+                        write_rds(values$model_list , "values_model_list.rds")
             # write_rds(values$df_models, "values_df_models.rds")
             # write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
             # write_rds(values$df_tm_models, "values_df_tm_models.rds")
@@ -550,7 +555,7 @@ server <- function(session, input, output) {
     output$show_BIC_plot_button <- renderUI({
         req(values$df)
         actionButton("show_BIC_plot", 
-                     p("Display/update plot with fits for all selected models.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),  width = '100%')
+                     p("Display/update fit plot.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),  width = '100%')
     })
     
     output$show_best_fits_button <- renderUI({
@@ -594,14 +599,17 @@ server <- function(session, input, output) {
                                              s2_pred = "Fit 3",
                                              s2_d_pred = "Fit 4")) %>%
                 select(c(well, condition, `selected fit`)) 
+            
+            write_rds(values$df_BIC_display, "values_df_BIC_display.rds")
             values$df_BIC_display # this will render in the table 
+        
             
         })
 
 
     }, options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
     
-    
+   
 
 } # end server
 # Run the application 
