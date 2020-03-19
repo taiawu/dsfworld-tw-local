@@ -195,6 +195,10 @@ server <- function(session, input, output) {
 # data layout and handling server --------------------------- 
 
 # plotting server  ---------------------------    
+    
+    ### from the plottin applet 
+    
+   
     output$update_plot <- renderUI({
         req(values$df)
         actionButton("update_plot", p("Update plot", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),  width = '100%')
@@ -216,10 +220,10 @@ server <- function(session, input, output) {
                     plot.title = element_text(lineheight=.8, face="bold", size = 10*1.5)) 
     })
     
-    plot_updated <- eventReactive( input$update_plot,  { # only when the "update plot" button is clicked, update the plot 
+    plot_updated <- eventReactive( input$update_plot,  { # only when the "update plot" button is clicked, update the plot
         print("plot changed") # REVISIT
         req(values$df) # only render the plot if there is data
-        
+
         unnest(values$df) %>%
             ggplot(aes(x = Temperature, y = value, group = well)) +
             geom_line(size = 0.5, alpha = 0.7, color = "red") +
@@ -228,7 +232,7 @@ server <- function(session, input, output) {
             dsfworld_default +
             theme(  text = element_text(size = 10*1.25),
                     axis.text = element_text(size = 10),
-                    plot.title = element_text(lineheight=.8, face="bold", size = 10*1.5)) 
+                    plot.title = element_text(lineheight=.8, face="bold", size = 10*1.5))
     })
     
     fit_plots <- eventReactive( input$show_BIC_plot, {
@@ -608,6 +612,8 @@ server <- function(session, input, output) {
 
 
     }, options = list(scrollX = TRUE, scrollY = 200, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
+    
+    ##### end 4_analyze appler server 
     
    
 

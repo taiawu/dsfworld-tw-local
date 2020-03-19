@@ -1,0 +1,37 @@
+Type,,,,,,,,,,,,,
+Dye,,1,2,3,4,5,6,7,8,9,10,11,12
+Dye,A,A015,A020,L006,L032,L037,L039,L041,L061,L062,L073,L078,L097
+Dye,B,A015,A020,L006,L032,L037,L039,L041,L061,L062,L073,L078,L097
+Dye,C,A015,A020,L006,L032,L037,L039,L041,L061,L062,L073,L078,L097
+Dye,D,A015,A020,L006,L032,L037,L039,L041,L061,L062,L073,L078,L097
+Dye,E,A015,A020,L006,L032,L037,L039,L041,L061,L062,L073,L078,L097
+Dye,F,A015,A020,L006,L032,L037,L039,L041,L061,L062,L073,L078,L097
+Dye,G,A015,A020,L006,L032,L037,L039,L041,L061,L062,L073,L078,L097
+Dye,H,A015,A020,L006,L032,L037,L039,L041,L061,L062,L073,L078,L097
+DNA,,1,2,3,4,5,6,7,8,9,10,11,12
+DNA,A,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA
+DNA,B,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA
+DNA,C,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA,601DNA
+DNA,D,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg
+DNA,E,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg
+DNA,F,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg,601DNAgg
+DNA,G,None,None,None,None,None,None,None,None,None,601DNAgg,601DNAgg,601DNAgg
+DNA,H,None,None,None,None,None,None,None,None,None,None,None,None
+Polyamide,,1,2,3,4,5,6,7,8,9,10,11,12
+Polyamide,A,None,None,None,None,None,None,None,None,None,None,None,None
+Polyamide,B,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1
+Polyamide,C,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2
+Polyamide,D,None,None,None,None,None,None,None,None,None,None,None,None
+Polyamide,E,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1
+Polyamide,F,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2,Polyamide 2
+Polyamide,G,None,None,None,None,None,None,None,None,None,None,None,None
+Polyamide,H,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1,Polyamide 1
+DNA_conc,,1,2,3,4,5,6,7,8,9,10,11,12
+DNA_conc,A,1,1,1,1,1,1,1,1,1,1,1,1
+DNA_conc,B,1,1,1,1,1,1,1,1,1,1,1,1
+DNA_conc,C,1,1,1,1,1,1,1,1,1,1,1,1
+DNA_conc,D,1,1,1,1,1,1,1,1,1,"0,25","0,25","0,25"
+DNA_conc,E,1,1,1,1,1,1,1,1,1,"0,25","0,25","0,25"
+DNA_conc,F,1,1,1,1,1,1,1,1,1,"0,25","0,25","0,25"
+DNA_conc,G,0,0,0,0,0,0,0,0,0,0,0,0
+DNA_conc,H,0,0,0,0,0,0,0,0,0,0,0,0

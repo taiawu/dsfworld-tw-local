@@ -499,6 +499,7 @@ build_sig1 <- function(  data, model_pars, which_model) {
 }
 
 build_sig2 <- function(  data, model_pars, which_model) {
+  print("building sig2")
   pars <- as.list(model_pars$estimate)
   names(pars) <- model_pars$term
   
@@ -776,6 +777,7 @@ add_sig2_col <- function( data ) {
 
 
 model_tms_by_dRFU <- function( df_models, win3d ) {
+  print("making model tms by drFU, calling sigmoid_2")
   df_pred_sgd1 <- df_models  %>% # the model outcomes, with sgd1 added for all predictions within the nested data
     group_by(well, which_model, component)  %>%
     mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%

@@ -1,0 +1,942 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(tidyverse)
+```
+```{r}
+source("../2_add_layouts/support_scripts/layout_handling.R")
+source("../1_upload_raw/support_scripts/upload_formatters.R")
+```
+
+```{r}
+# given a file path to the layout, make the layout dataframe
+lo384 <- make_layout("sample_layout.csv") %>%
+        add_standardized_wells()
+
+data_raw <- read.csv("sample_data_file.csv")
+
+by_well <- nest_raw(data_raw) %>%
+           add_standardized_wells()
+
+by_well_layout <- join_layout_nest(by_well, lo384) 
+by_well_layout
+```
+
+```{r}
+
+#all(c("well_", "well_f_", "row_", "col_") %in% names(by_well))
+ensure_standardized_wells <- function( df ) {
+  if ( all(c("well_", "well_f_", "row_", "col_") %in% names(df)) == FALSE ) { # if standardized well columns are missing
+    df_out <- df %>%
+              add_standardized_wells()
+  } else {
+    df_out <- df
+  }
+  
+  df_out 
+}
+
+by_well %>% ensure_standardized_wells()
+rtable %>% ensure_standardized_wells()
+```
+
+```{r}
+# the part that's failing
+new_names <- readRDS("new_names_raw_handson.rds")
+values_df_1 <- readRDS("values_df_1.rds")
+new_names
+values_df_1
+
+join_layout_nest <- function(by_well, layout) { 
+  by_well_ <- ensure_standardized_wells(by_well)
+  layout_ <- ensure_standardized_wells(layout)
+  dup_cols <- names(layout_)[!c(names(layout_) %in% c("well_", "well_f_", "row_", "col_"))]
+  
+  if (!"condition" %in% names(layout_)) {
+    print("no_cond")
+    layout_ <- layout_ %>%
+                unite("condition", -one_of(c("well","well_", "well_f_", "row_", "col_")), remove = FALSE)
+  }
+  
+  by_well_ %>%
+    unnest_legacy() %>%
+    dplyr::select(-one_of(dup_cols )) %>% # if it's already in layout, drop it
+    dplyr::left_join(., layout_, by = c("well_", "well_f_", "row_", "col_")) %>%
+    group_by(condition, Temperature) %>%
+    dplyr::mutate(mean = mean(value),
+                  sd = sd(value),
+                  mean_norm = mean(value_norm),
+                  sd_norm = sd(value_norm)) %>%
+    ungroup() %>%
+    nest(data = c(Temperature, value, mean, sd, Temperature_norm, value_norm, mean_norm, sd_norm)) # THIS IS NOT nest_legacy
+}
+
+join_layout_nest(values_df_1, new_names %>% dplyr::select(-condition))
+new_names
+```
+
+
+
+```{r}
+l_names <- c("a", "condition")
+all(l_names[!l_names == "condition"] %in% c("a"))
+    # common_cols <- c("well","well_", "well_f_", "row_", "col_", "row", "column") %>%
+    #                 .[. %in% names(layout_)]
+# all(c("a", "B") %in% c("b"))
+# a <- c("well","well_", "well_f_", "row_", "col_", "row", "column") %>%
+#   .[. %in% c("well","well_", "well_f_", "row_", "col_") ]
+#  a 
+#a[a %in% c(c("well","well_", "well_f_", "row_", "col_") )]
+
+#c("well","well_", "well_f_", "row_", "col_", "row", "column") %in% c("well","well_", "well_f_", "row_", "col_", "row", "column") 
+```
+
+```{r}
+names(new_names)[!c(names(new_names) %in% c("well_", "well_f_", "row_", "col_"))]
+names(new_names)
+c(names(new_names) %in% c("well_", "well_f_", "row_", "col_"))
+```
+
+
+```{r}
+    # output$r_table <- renderRHandsontable({ 
+    #     req(values$df)
+    #     rhandsontable( values$df %>% select_if(is.character), height = 200, useTypes = TRUE, stretch = "all") %>% hot_col("well", readOnly = TRUE) #%>%  hot_context_menu(allowRowEdit = FALSE, allowColEdit = TRUE)
+    # })
+ensure_standardized_wells <- function( df ) {
+  if ( all(c("well_", "well_f_", "row_", "col_") %in% names(df)) == FALSE ) { # if standardized well columns are missing
+    df_out <- df %>%
+              add_standardized_wells()
+  } else {
+    df_out <- df
+  }
+  
+  df_out 
+}
+  
+join_layout_nest <- function(by_well, layout) { 
+  by_well_ <- ensure_standardized_wells(by_well)
+  layout_ <- ensure_standardized_wells(layout)
+  
+  by_well_ %>%
+    unnest_legacy() %>%
+    dplyr::left_join(., layout_, by = c("well_", "well_f_", "row_", "col_")) %>%
+    rename( well.original = well.x,
+            well.layout = well.y ) %>%
+    group_by(condition, Temperature) %>%
+    dplyr::mutate(mean = mean(value),
+                  sd = sd(value),
+                  mean_norm = mean(value_norm),
+                  sd_norm = sd(value_norm)) %>%
+    ungroup() %>%
+    nest(data = c(Temperature, value, mean, sd, Temperature_norm, value_norm, mean_norm, sd_norm)) # THIS IS NOT nest_legacy
+}
+
+handson_layout <- by_well %>%
+          select_if(is.character) 
+
+      if (! "condition" %in% names(handson_layout)) { 
+            print("no condition")
+            handson_layout <- handson_layout %>% 
+                mutate(condition = .$well_)}
+        print("end no condition")
+        
+
+# what if you overlay the same thing twice?
+by_well_layout <- join_layout_nest(by_well, handson_layout) 
+by_well_layout
+```
+
+```{r}
+# # test the well translation function
+# by_well_a1 <- by_well %>% mutate(well = c("a1", "a2", "a3"))
+# by_well_A01 <- by_well %>% mutate(well = c("A01", "A02", "A03"))
+# by_well_a01 <- by_well %>% mutate(well = c("a01", "a02", "a03"))
+# 
+# add_standardized_wells( by_well )
+# add_standardized_wells( by_well_a1 )
+# add_standardized_wells( by_well_A01 )
+# add_standardized_wells( by_well_a01 )
+
+# test the layouts 
+# lo384E <- make_layout("sample_layout_empties.csv") # lets just keep the "empty" convention, since i don't know how different computers/excel versions deal with empty cells 
+# lo96 <- make_layout("sample_layout_96.csv")
+```
+
+
+
+```{r}
+## for plotting
+join_layout_nest <- function(by_well, layout) { 
+  by_well_ <- ensure_standardized_wells(by_well) # this will always be fresh, un-layout-joined dataframe
+  layout_ <- ensure_standardized_wells(layout)
+  l_names <- names(layout_)
+  dup_cols <- l_names[!l_names %in% c("well_", "well_f_", "row_", "col_")]
+  #dup_cols <- names(layout_)[!c(names(layout_) %in% c("well_", "well_f_", "row_", "col_"))]
+  
+  common_cols <- c("well","well_", "well_f_", "row_", "col_", "row", "column") %>%
+                 .[. %in% names(layout_) ]
+
+  if (!"condition" %in% names(layout_)) { # this should never happen....
+    print("no_cond see join_layout_nest in layout_handling.R")
+    layout_ <- layout_ %>%
+                unite("condition", -one_of(c("well","well_", "well_f_", "row_", "col_", "row", "column")), remove = FALSE)
+  } else { # if "condition" is present in the layout
+    if (  all(l_names[!l_names == "condition"] %in% common_cols) == TRUE ) { # if "condition" is the only column unique to the layout
+      common_cols <- c("well_", "well_f_", "row_", "col_", "row", "column") # retain the well column
+      print("all names in common cols ZZ")
+    } ### IX THIS--laout needs to have something left to combine
+  }
+  
+    layout_ <- layout_ %>%
+               select(-condition) %>%
+               unite("condition", -one_of(common_cols), remove = FALSE) %>%
+               mutate_if(is.factor, as.character)
+  by_well_ %>%
+    unnest_legacy() %>%
+    dplyr::select(-one_of(dup_cols )) %>% # if it's already in layout, drop it
+    dplyr::left_join(., layout_, by = c("well_", "well_f_", "row_", "col_")) %>%
+    group_by(condition, Temperature) %>%
+    dplyr::mutate(mean = mean(value),
+                  sd = sd(value),
+                  mean_norm = mean(value_norm),
+                  sd_norm = sd(value_norm)) %>%
+    ungroup() %>%
+    nest(data = c(Temperature, value, mean, sd, Temperature_norm, value_norm, mean_norm, sd_norm)) # THIS IS NOT nest_legacy
+}
+
+get_layout_vars <- function( df ) {
+  layout_vars <- names(df) %>%
+              .[!. %in% c("well_", "well_f_", "row_", "col_", "row", "column", "data")]
+  df %>%
+    select( one_of(layout_vars) ) %>%
+    plyr::mutate("-" = rep("", nrow(.)))
+}
+```
+
+```{r}
+choices <- list("one", "two", "three") # always stays the same; all possible options
+chosen <- list("one", "two") # what has been actively selected
+
+chosen_bool <- c(choices %in% chosen) %>% # convert this to a bool
+                  as.list() %>%
+                  set_names(choices) 
+chosen_bool
+
+chosen <- chosen_bool[chosen_bool == TRUE] %>% names()  # use the chosen bool to re-update chosen, as a list of names
+chosen
+```
+
+```{r}
+
+df_mt <- head(mtcars) %>%
+  mutate(index = c(1:nrow(.)))
+
+df_mt_t <- df_mt %>% 
+  select(one_of("disp"))
+
+mt_filt <- (df_mt_t %>% as_vector()) %in% c(160, 108) 
+
+df_filt <- df_mt[mt_filt,]
+
+
+
+df_mt_t2 <- df_mt %>% 
+  select(one_of("mpg"))
+
+mt_filt2 <- (df_mt_t2 %>% as_vector()) %in% c(21.0) 
+
+df_filt2 <- df_mt[mt_filt2,]
+
+df_final <- inner_join(df_filt, df_filt2)
+df_filt
+df_filt2
+df_final
+
+```
+```{r}
+a <- head(mtcars) %>% select(c(disp, cyl))
+a
+
+b <- head(mtcars) %>%
+    select(c(disp, hp)) %>%
+    rename(disp_ = "disp")
+
+b
+
+df_c <- left_join(b, a, by = c("disp_" = "disp"))
+
+df_c %>% filter(., between(hp, 80, 150))
+```
+
+# making the model plots
+```{r}
+# this code to be added to plotting.R
+cond_df_model_for_plot <- function( model_df, df_BIC ) {
+  model_df %>%
+      group_by(well) %>%
+      nest() %>%
+      ungroup() %>%
+      full_join(df_BIC) %>%
+      unnest()  %>%
+      select(well, condition, Temperature, Temperature_norm, pred, value_norm, which_model, component, BIC) %>%
+      pivot_longer(-c(well, Temperature, Temperature_norm, which_model, component, BIC, condition), names_to = "which_value", values_to = "value") %>%
+      mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) 
+  }
+
+cond_df_BIC_for_plot <- function( df_BIC ) {
+        df_BIC %>%
+          group_by(well) %>%
+          nest() %>%
+          ungroup() %>%
+          unnest() %>%
+          group_by(well) %>%
+          mutate(is_min = (BIC == min(BIC))) %>%
+          ungroup()%>%
+          mutate(which_model_f = factor(.$which_model, levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"))) 
+}
+
+make_model_names <- function( model_names_present ) {
+  mods <- tibble(
+            model_names = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"),
+            model_names_f = factor(c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred"), levels = c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred")),
+            human_read =  c("Fit 1", "Fit 2", "Fit 3", "Fit 4"),
+            human_read_f = factor(c("Fit 1", "Fit 2", "Fit 3", "Fit 4"), levels = c("Fit 1", "Fit 2", "Fit 3", "Fit 4"))
+          )
+
+    mods_present <- mods %>%
+                     filter(model_names %in% model_names_present) 
+    name_vec_f <- mods_present$human_read_f
+    names(name_vec_f) <- mods_present$model_names_f
+    
+    name_vec <- mods_present$human_read
+    names(name_vec) <- mods_present$model_names
+    
+    list("factor" = name_vec_f, "character" = name_vec)
+}
+
+match_well_to_cond <- function( df_models ) {
+  df <- df_models %>% distinct(well, .keep_all = TRUE)
+  wells <- map2(df$well, df$condition, paste, sep = "\n") %>% as_vector()
+  names(wells) <- df$well
+  wells
+}
+
+dsfworld_default_model <- theme( # adapted from free amino acids hit call
+  text = element_text(size = 10*1.25),
+  axis.text = element_text(size = 8*1.25),
+  axis.text.x = element_text(angle = 0, vjust = 0.5),
+  legend.position = "right",
+  plot.title = element_text(lineheight=.8, face="bold", size = 12*1.25),
+  panel.grid.minor = element_blank(),
+  panel.grid.major = element_blank(), 
+  strip.background = element_blank(),
+  strip.text.y = element_text(angle = 0),
+  aspect.ratio = (1/1.618)
+)
+
+
+plot_all_fits_shiny <- function(df_models, df_BIC) { # takes pre-conditioned dataframes 
+  
+  # create vectors used to label and position data within the plots
+  model_names <- make_model_names( df_models$which_model %>% unique() )
+  well_names <- match_well_to_cond( df_models )
+  mid_temp <- (max(df_models$Temperature) - min(df_models$Temperature))/2 + min(df_models$Temperature)
+  
+  
+  # create the plot
+  df_models %>%
+    ggplot() +
+    geom_line (aes(x = Temperature, # RFU data, fitted and "real"
+                   y = value, 
+                   linetype = which_value, 
+                   color = component, 
+                   group = interaction(which_model, component, which_value)
+    ), 
+    
+    alpha = 0.5) +
+    geom_text (data = df_BIC, aes(label = paste0("BIC ", round(BIC, 0)), # BIC values for fits
+                                  x = mid_temp,
+                                  y = 1.3,
+                                  group = well,
+                                  alpha = is_min),
+               size = 3) +
+    facet_grid (well~which_model_f,
+                labeller = labeller(well = well_names,
+                                    which_model_f = model_names$character)
+    ) +
+    
+    scale_alpha_manual (values = c(0.7, 1), guide = FALSE) +
+    scale_linetype_manual (values = c("pred" = "solid", "value_norm" = "dashed"),
+                           name="",
+                           breaks=c( "value_norm", "pred"),
+                           labels=c("Data", "Fits")
+    ) +
+    scale_color_manual (values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"),
+                        name="Fit component",
+                        breaks=c("full_pred", "sigmoid_1", "sigmoid_2", "initial_decay"),
+                        labels=c("Final fit", "Sigmoid 1", "Sigmoid 2", "Initial RFU")
+    ) +
+    guides  (linetype = guide_legend(order = 1),
+             color = guide_legend(order = 2))+
+    
+    ylim (c(0, 1.4))+
+    theme_bw() +
+    dsfworld_default_model +
+    labs (x = "Temperature (ºC)", y = "Normalized RFU")
+}
+
+plot_best_fits_shiny <- function(df_models, df_best_in) {
+  # create vectors used to label and position data within the plots
+   well_names <- match_well_to_cond( df_models )
+   mid_temp <- (max(df_models$Temperature) - min(df_models$Temperature))/2 + min(df_models$Temperature)
+   
+   df_best <- df_best_in %>%
+                mutate(best_model = which_model) %>%
+                     mutate(best_model_human = recode(best_model,
+                                      s1_pred = "Fit 1",
+                                      s1_d_pred = "Fit 2",
+                                      s2_pred = "Fit 3",
+                                      s2_d_pred = "Fit 4")) 
+
+df_models_best <- df_models_p %>% 
+                full_join(df_best)  %>%
+                dplyr::filter(which_model == best_model) %>%
+                mutate(best_model = recode(best_model,
+                                      s1_pred = "Fit 1",
+                                      s1_d_pred = "Fit 2",
+                                      s2_pred = "Fit 3",
+                                      s2_d_pred = "Fit 4")) 
+df_models_best %>%
+   ggplot() +
+        geom_line (aes(x = Temperature, # RFU data, fitted and "real"
+                      y = value, 
+                      linetype = which_value, 
+                      color = component, 
+                      group = interaction(which_model, component, which_value)
+                      ), 
+                     alpha = 0.5) +
+          geom_text (data = df_best, 
+                     aes(label = paste0("Selected: ", best_model_human), # BIC values for fits
+                                         x = 50,
+                                         y = 1.3,
+                                         group = well),
+                                         size = 3) +
+          facet_wrap(~well,  #, 
+                      labeller = labeller(well = well_names)
+                      ) +
+        
+       # scale_alpha_manual (values = c(0.7, 1), guide = FALSE) +
+        scale_linetype_manual (values = c("pred" = "solid", "value_norm" = "dashed"),
+                                name="",
+                                breaks=c( "value_norm", "pred"),
+                                labels=c("Data", "Fits")
+                                ) +
+        scale_color_manual (values = c("full_pred" = "#081d58", "initial_decay" = "#edf8b1", "sigmoid_1" = "#253494", "sigmoid_2" = "#41b6c4"),
+                                name="Fit component",
+                                breaks=c("full_pred", "sigmoid_1", "sigmoid_2", "initial_decay"),
+                                labels=c("Final fit", "Sigmoid 1", "Sigmoid 2", "Initial RFU")
+                                ) +
+        guides  (linetype = guide_legend(order = 1),
+                 color = guide_legend(order = 2))+
+        
+        ylim (c(0, 1.4))+
+        theme_bw() +
+        dsfworld_default_model +
+        labs (x = "Temperature (ºC)", y = "Normalized RFU")
+}
+
+```
+
+use of the plotting functions
+```{r}
+#library(tidyverse)
+# exported directly from dsfworld
+df_models_shiny <- readRDS("../4_analyze/values_df_models.rds")
+df_BIC_models_shiny <- readRDS("../4_analyze/values_df__BIC_models.rds")
+s1_list_shiny <- readRDS("../4_analyze/values_s1_list.rds")
+
+df_models_p <- cond_df_model_for_plot(df_models_shiny, df_BIC_models_shiny )
+df_models_bic_p <- cond_df_BIC_for_plot ( df_BIC_models_shiny )
+
+plot_all_fits_shiny(df_models_p, df_models_bic_p)
+
+df_BIC_best <- readRDS( "../4_analyze/values_df_BIC_best_post_click.rds")
+df_BIC_models_shiny
+plot_best_fits_shiny(df_models_p, df_BIC_best)
+```
+```{r}
+
+df_BIC_best <- df_BIC_best %>%
+  #set_names(c("well", "condition", "best_model")) %>%
+                mutate(best_model = which_model)
+# recode(best_model,
+#                                       s1_pred = "Fit 1",
+#                                       s1_d_pred = "Fit 2",
+#                                       s2_pred = "Fit 3",
+#                                       s2_d_pred = "Fit 4"))
+
+ df_mods_BIC <- df_models %>% 
+                full_join(df_BIC_best) %>%
+                dplyr::filter(which_model == best_model) 
+ 
+# df_models_p, df_BIC_best
+df_BIC_best_p2 <- df_BIC_best %>%
+  set_names(c("well", "condition", "best_model")) %>%
+                mutate(best_model = recode(best_model,
+                                      s1_pred = "Fit 1",
+                                      s1_d_pred = "Fit 2",
+                                      s2_pred = "Fit 3",
+                                      s2_d_pred = "Fit 4"))
+
+df_models_p2 <- df_models_p %>% 
+                full_join(df_BIC_best) 
+# %>%
+#                   mutate(best_model = recode(best_model,
+#                                       s1_pred = "Fit 1",
+#                                       s1_d_pred = "Fit 2",
+#                                       s2_pred = "Fit 3",
+#                                       s2_d_pred = "Fit 4"))
+
+
+df_models_shiny <- readRDS("../4_analyze/values_df_models.rds")
+df_BIC_models_shiny <- readRDS("../4_analyze/values_df__BIC_models.rds")
+
+
+df_models_p <- cond_df_model_for_plot(df_models_shiny, df_BIC_models_shiny )
+
+df_BIC_best <- readRDS( "../4_analyze/values_df_BIC_best_post_click.rds")
+df_BIC_best <- df_BIC_best %>%
+                mutate(best_model = which_model)
+
+df_models_p2 <- df_models_p %>% 
+                full_join(df_BIC_best)  %>%
+                dplyr::filter(which_model == best_model) %>%
+                mutate(best_model = recode(best_model,
+                                      s1_pred = "Fit 1",
+                                      s1_d_pred = "Fit 2",
+                                      s2_pred = "Fit 3",
+                                      s2_d_pred = "Fit 4")) 
+  
+df_models_p2 
+#                 dplyr::filter(which_model == best_model) 
+df_BIC_best_p2
+df_models_p2
+```
+
+
+```{r}
+## various outputs from the model fitting
+# for RDS, output the following
+model_outputs <- list(
+  "read_me" = "a string about what is in each file"
+  # ,
+  # "df_models" = values$df_models,
+  # "df_BIC_models" = values$df_BIC_models,
+  # "df_tm_models" = values$df_tm_models
+  )
+
+model_outputs
+
+tibble(
+  read_me = "brief descriptions of contents. see github for more detailed descriptions.",
+  df_models = "a"
+)
+```
+
+# getting tmas by dRFU from models 
+```{r}
+# as they will be in the app
+s2_list <- readRDS("../4_analyze/values_s2_list.rds")
+s2_d_list <- readRDS("../4_analyze/values_s2_d_list.rds")
+s1_list <- readRDS("../4_analyze/values_s1_list.rds")
+s1_d_list <- readRDS("../4_analyze/values_s1_d_list.rds")
+
+get_Tms <- function(model_df, model) {
+  pars <- model_df %>%
+    unnest_legacy(model_pars) %>%
+    dplyr::filter(grepl('xmid', term)) %>%
+    mutate( tma = map(estimate, n2r) %>% 
+              as_vector() %>%
+              round( digits = 1) ) %>%
+    select(well, condition, term, tma) %>% # 20200310
+    #select(well,  term, tma) %>%
+    plyr::mutate(which_model = rep(model, nrow(.)))
+  #pivot_wider(names_from = term, values_from = tma)
+}
+
+make_model_tm_table <- function( model_tms) {
+  # for the s1 models, add a dummy xmid2 column. clunkly, i know, but a simple fix
+  if (!"xmid2" %in% names(model_tms)) { model_tms <- model_tms %>%  plyr::mutate(xmid2 = rep(NA, nrow(.)))}
+  
+  if ("condition" %in% names(model_tms)) {
+    # make the averaged table
+    tm_table_models <- model_tms %>%
+      select(condition, which_model, xmid, xmid2) %>%
+      group_by(condition, which_model)   %>%
+      summarise( mean_xmid1 = mean(xmid) ,
+                 sd_xmid1 = sd(xmid),
+                 mean_xmid2 = mean(xmid2) ,
+                 sd_xmid2 = sd(xmid2)) %>%
+      mutate_if(is.numeric, round, 2) %>%
+      ungroup()
+    
+  } else {
+    tm_table_models <- model_tms %>%
+      select(well, which_model, xmid, xmid2) %>%
+      group_by(well, which_model)   %>%
+      summarise( mean_xmid1 = mean(xmid) ,
+                 sd_xmid1 = sd(xmid),
+                 mean_xmid2 = mean(xmid2) ,
+                 sd_xmid2 = sd(xmid2)) %>%
+      mutate_if(is.numeric, round, 2) %>%
+      ungroup()
+  }
+  
+  # tm_table_models <- tm_table_models %>%
+  #         # mutate( which_model = grep_and_gsub(.$which_model, c("s1", "s1_d", "s2","s2_d"), c("Model 1", "Model 2", "Model 3", "Model 4"), c("Other")))  %>% # move this to later, for the for-display table only!
+  #         #                set_names(c("Condition", "Model", "Tm' 1", "Tm' 1 SD", "Tm' 2", "Tm' 2 SD")) %>%
+  #         discard(~all(is.na(.x))) # get rid of any all-NA colmns
+  
+  tm_table_models
+}
+
+Tm_by_dRFU <- function( data,  sgd1) {
+  df <- tibble( x = data$Temperature, 
+                y = sgd1)
+  
+  grid <- tibble( x = seq(min(df$x), max(df$x), by = 0.1) ) %>% modelr::add_predictions(loess(y ~ x, data = df, span = 0.1))
+  
+  tma <- grid$x[which(grid$pred == max(grid$pred))]
+  
+  tma # the apparent Tm from the first derivative
+}
+
+
+model_fit_s1 <- s1_list$model
+model_fit_s1_d <- s1_d_list$model
+model_fit_s2 <- s2_list$model
+model_fit_s2_d <- s2_d_list$model
+
+# # how its done now 
+  tm_table_model_s1 <- get_Tms(model_fit_s1, "s1_pred") %>%  # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+                      pivot_wider(names_from = term, values_from = tma) %>%
+                      make_model_tm_table()
+  
+  tm_table_model_s1
+```
+
+```{r}
+# 4_analyze/app.R
+library(quantmod) # contains the findValleys function, which maybe we should just extract and put verbatim in a source file instead of loading this whole thing...?
+library(minpack.lm) # contains the nlsLM function, which we use for our fitting
+library(modelr) # used in both the data modeling and the analysis model fitting 
+library(SciViews) # contains the ln function used in the data modeling
+library(signal) # contains the savistky golay filter (savgolfilt), used to generate the first derivative data in both data modeling and analysis model fitting  
+
+
+library(shinyBS) # drop-down panels
+library(tidyverse) #  handling data structures and plotting
+
+source("../4_analyze/support_scripts/upload_formatters.R")
+source("../4_analyze/support_scripts/layout_handling.R")
+source("../4_analyze/support_scripts/plotting.R")
+source("../4_analyze/support_scripts/analysis.R")
+```
+
+
+```{r}
+# this is the input, predefined
+# full lists, don't need these
+# s2_list <- readRDS("../4_analyze/values_s2_list.rds")
+# s2_d_list <- readRDS("../4_analyze/values_s2_d_list.rds")
+# s1_list <- readRDS("../4_analyze/values_s1_list.rds")
+# s1_d_list <- readRDS("../4_analyze/values_s1_d_list.rds")
+
+# the model dfs, from which the data we get the tms from will come
+df_models <- readRDS("../4_analyze/values_df_models.rds")
+
+# # the tm table whose format we should copy
+# df_tm <- readRDS("../4_analyze/values_df_tm_models.rds")
+# df_tm 
+
+# these closures will be assigned at the time
+low_T <- min(df_models$Temperature)
+high_T <- max(df_models$Temperature)
+n_meas <- df_models$Temperature %>% unique() %>% length()
+
+            
+ n2r <<- make_temp_n2r(range(low_T:high_T)) #
+ win3d <<- floor(3/((n2r(1) - n2r(0))/n_meas))
+ if ( win3d < 5 ) { win3d <<- 5 }
+ peak_finder_nest <<- make_peak_finder_nest(win3d)
+ sgfilt_nest <<- sgfilt_set_n(n_ = find_sgolay_width( win3d ))
+ 
+```
+
+```{r}
+# function to calculate the Tm by dRFU for the models--different only in the input formats for the function. ideally would be merged with the dRFU Tma function.
+Tm_by_dRFU_for_model <- function( data ) {
+  df <- tibble( x = data$Temperature, 
+                y = data$sgd1_pred)
+  
+  grid <- tibble( x = seq(min(df$x), max(df$x), by = 0.1) ) %>% modelr::add_predictions(loess(y ~ x, data = df, span = 0.1))
+  
+  tma <- grid$x[which(grid$pred == max(grid$pred))]
+  
+  tma # the apparent Tm from the first derivative
+}
+
+mean_no_NaN <- function( vec ) {
+  a <- mean(vec, na.rm = TRUE)
+  
+  if( is.nan(a) == TRUE) {
+    a <- NA
+  }
+  a
+}
+
+get_condition <- function(data) {
+  data$condition %>% unique()
+}
+
+add_sig2_col <- function( data ) {
+  if ("sigmoid_2" %in% names(data)) {
+    data
+  } else {
+    data %>%
+      mutate(sigmoid_2 = map(.$sigmoid_1, function(x) {NA}) %>% as_vector())
+  }
+}
+```
+
+
+```{r}
+df_models <- readRDS("../4_analyze/values_df_models.rds")
+
+  df_pred_sgd1 <- df_models  %>% # the model outcomes, with sgd1 added for all predictions within the nested data
+                  group_by(well, which_model, component)  %>%
+                  mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
+                  nest() %>%
+                  mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector())
+  
+  df_tma_s1 <- df_pred_sgd1 %>% # all calculated temperatures, with the rest of the data now removed
+    filter(which_model == "s1_pred") %>%
+    mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector()) %>%
+    ungroup() %>%
+    mutate(condition = map(data, get_condition) %>% as_vector()) %>%
+    select(-data) %>%
+    dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
+    pivot_wider(names_from = component, values_from  = tma)  %>%
+    group_by(condition, which_model) 
+  
+    df_tma <- df_pred_sgd1 %>% # all calculated temperatures, with the rest of the data now removed
+   #filter(which_model == "s1_pred") %>%
+    mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector()) %>%
+    ungroup() %>%
+    mutate(condition = map(data, get_condition) %>% as_vector()) %>%
+    select(-data) %>%
+    dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
+    pivot_wider(names_from = component, values_from  = tma)  %>%
+    group_by(condition, which_model) 
+  
+  df_tma
+   df_tma_s1
+```
+
+
+```{r}
+model_tms_by_dRFU <- function( df_models, win3d ) {
+  df_pred_sgd1 <- df_models  %>% # the model outcomes, with sgd1 added for all predictions within the nested data
+                  group_by(well, which_model, component)  %>%
+                  mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
+                  nest() %>%
+                  mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector())
+  
+  df_tma <- df_pred_sgd1 %>% # all calculated temperatures, with the rest of the data now removed
+                  mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector()) %>%
+                  ungroup() %>%
+                  mutate(condition = map(data, get_condition) %>% as_vector()) %>%
+                  select(-data) %>%
+                  dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
+                  pivot_wider(names_from = component, values_from  = tma)  %>%
+                  group_by(condition, which_model) %>%
+                  add_sig2_col() %>% # if the sigmoid_2 column is missing, add in an empty one for it 
+                  mutate(mean_tma1 = mean_no_NaN(sigmoid_1) %>% round(1),
+                         mean_tma2 = mean_no_NaN(sigmoid_2) %>% round(1),
+                         sd_tma1 = sd(sigmoid_1) %>% round(1),
+                         sd_tma2 = sd(sigmoid_2) %>% round(1)) 
+  
+  df_tma_mean <- df_tma %>% # the mean tmas only, for downloading and displaying
+                  distinct(mean_tma1, mean_tma2, .keep_all = TRUE) %>%
+                  ungroup() %>%
+                  dplyr::select(c(condition, which_model, mean_tma1, sd_tma1, mean_tma2, sd_tma2))
+
+  out <- list("df_pred_sgd1" = df_pred_sgd1,
+              "df_tma" = df_tma,
+              "df_tma_mean" = df_tma_mean)
+}
+```
+
+```{r}
+df_models <- readRDS("../4_analyze/values_df_models.rds")
+
+df_mod_tm <- model_tms_by_dRFU( df_models, win3d )  # implement it in this line 
+
+df_mod_tm_s1 <- model_tms_by_dRFU( df_models %>% filter(which_model == "s1_pred"), win3d )
+df_mod_tm_s1
+```
+## output formats
+```{r}
+# values_df_tm_models_table.rds
+# outlist1.rds
+# support_scripts
+# values_df__BIC_models.rds
+# values_df_BIC_best_post_click.rds
+# values_df_models.rds
+
+outlist1 <- readRDS("../4_analyze/outlist1.rds") # closures and functions used to create the fits
+df_models <- readRDS("../4_analyze/values_df_models.rds")
+df_BIC_models <- readRDS("../4_analyze/values_df__BIC_models.rds")
+df_selected_models <- readRDS("../4_analyze/values_df_tm_models_table.rds")
+df_tm_table <- readRDS("../4_analyze/values_df_tm_models.rds")
+
+values_df <- readRDS("../4_analyze/values_df_with_layout.rds")
+
+values_df %>%
+  unnest(data)
+
+df_mean_sd <- values_df %>%
+  unnest(data) %>%
+  select(c(condition, Temperature, mean, sd)) %>%
+  pivot_wider(names_from = condition, values_from = mean)
+
+df_mean_sd 
+# df_tm_table
+# df_selected_models
+
+        # switch(input$dataset1,
+        #        "Tma by dRFU" = head(mtcars),
+        #        "Tma by best fit" = ,
+        #        "Replicate-averaged raw data" = ,
+        #        "RFU data with fits" = )
+        # 
+        # switch(input$dataset2,
+        #        "Tma by dRFU, no replicate averaging" = head(mtcars),
+        #        "Tma by best fit, no replicate averaging" = ,
+        #        "Reformatted raw data" = ,
+        #        "Normalized raw data" = ,
+        #        "First derivative of raw data" = )
+        # 
+        # 
+        # switch(input$dataset3,
+        #        "Formatted and labled data" = head(mtcars),
+        #        "Data with model fitting results" = )
+values_df %>% unnest(data)
+```
+```{r}
+df_mean_sd <- values_df %>% # the raw data
+              unnest(data) %>%
+              select(c(condition, Temperature, mean, sd)) %>%
+              distinct(.keep_all = TRUE) %>%
+              pivot_wider(names_from = condition, values_from = c(mean, sd))
+
+df_norm_mean_sd <- values_df %>% # the normalized data
+              unnest(data) %>%
+              select(c(condition, Temperature, mean_norm, sd_norm)) %>%
+              distinct(.keep_all = TRUE) %>%
+              pivot_wider(names_from = condition, values_from = c(mean_norm, sd_norm))
+
+df_mean_sd
+df_norm_mean_sd
+```
+```{r}
+df_models_out <- df_models %>%
+                  select(c(well, Temperature, condition, which_model, component, pred)) %>%
+                  pivot_wider(names_from = c(which_model, component), values_from = pred) 
+# %>%
+#   left_join(df_models %>% select(c(Temperature, condition, value_norm)))
+
+# df_models_out_val <- df_models %>%
+#                   select(c(well, Temperature, condition, value_norm))  %>%
+#                   left_join(df_models_out, by = c("Temperature", "condition"))
+# %>%
+#                   left_join(df_models_out, by = "well")
+# # %>%
+#                   pivot_wider(names_from = c(which_model, component), values_from = pred)
+
+df_models_out
+df_models %>% select(c(Temperature, condition, value_norm))
+#df_models_out_val
+
+df_models$component %>% table()
+```
+```{r}
+model_list_s1 <- readRDS("../4_analyze/values_model_list_s1_only.rds")
+model_list_all <- readRDS("../4_analyze/values_model_list.rds")
+```
+```{r}
+model_list_s1$s1_list$
+```
+```{r}
+model_list_s1$s1_list$model%>%
+  
+  unnest(data)
+
+```
+
+
+```{r}
+str(model_list_s1)
+names(model_list_s1)
+```
+
+
+```{r}
+warpbreaks <- as_tibble(warpbreaks[c("wool", "tension", "breaks")])
+warpbreaks
+warpbreaks %>%
+  pivot_wider(
+    names_from = wool,
+    values_from = breaks,
+    values_fn = list(breaks = mean)
+  )
+```
+```{r}
+
+fish_encounters
+fish_encounters %>%
+  pivot_wider(names_from = station, values_from = seen)
+# Fill in missing values
+fish_encounters %>%
+  pivot_wider(
+    names_from = station,
+    values_from = seen,
+    values_fill = list(seen = 0)
+  )
+
+```
+
+
+
+
+
+
+
+
+
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+

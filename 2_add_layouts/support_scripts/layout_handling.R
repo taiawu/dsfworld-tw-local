@@ -41,6 +41,7 @@ nest_raw <- function( data_raw ) {
 }
 
 parse_well_vec <- function( well_vec ){
+  print("parsing well vec")
   l <- list(
     col =  parse_number(well_vec),
     row = str_extract_all(well_vec, "[A-Z; a-z]", simplify = TRUE) 
