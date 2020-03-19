@@ -198,6 +198,7 @@ server <- function(session, input, output) {
     
     ##### end data uploads applet
     
+    
     ###### layouts #####
                 # inputs: 
                     # input$layout_file # the user-uploaded layout file
@@ -279,6 +280,7 @@ server <- function(session, input, output) {
     #### end 2_layouts applet server
     
     
+    
     ###### plotting #####
     # inputs: 
     # values$df #
@@ -303,25 +305,24 @@ server <- function(session, input, output) {
     # input$y_title
     
     # outputs: 
-    # plot_initial
-    # plot_updated
-   
-    ############### begin potting server #######
-    # values <- reactiveValues() 
-    # values$data_raw <- readRDS("values_df_with_layout.rds")
-    # values$df <- readRDS("values_df_with_layout.rds")
-    # values$df_1 <- readRDS("values_df_with_layout.rds")
-    values$plot_chosen <- "initial"
+    # plot_initial # a simple, quick-rendering plot
+    # plot_updated # the user-made plot from the eval statements
+    # fit_plots # the BIC plots of all visualized fits
+    # fit_plots_best # the best fits only 
     
-    ######## begin data layout and handling #########   
-    ########## Render GUI elements for the analysis page ######
+    # values$plot_chosen # a string indicating which plot the user has chosen to display 
+    # chosen_plot # the plot which will actually be displayed in the window
+    
+    # output$final_plot
+    # output$download_plot # a GUI element
+   
+    ############### plotting functions #######
     output$update_plot <- renderUI({
         req(values$df)
         actionButton("update_plot", p("Update plot", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center") %>% strong(),  width = '100%')
     })
-    ########## End render GUI elements for the analysis page ######
     
-    ######## eval selections, to pass to the plotting function #########
+    # eval sections
     output$wrap_by <- renderUI({ # this is reactive by nature of being a render call? it can accept, therefore, rt(), which is a reactive expression. Can we
         req(values$df)
         if (input$facet == "none" | input$facet == "grid") return(NULL)
@@ -388,7 +389,7 @@ server <- function(session, input, output) {
         } else { legend_pos <- "right"}
         legend_pos})
     
-    ######## end eval selections, to pass to the plotting function #########  
+    ##end eval selections
     
     # update and re-render the plot only when the update-plot button is clicked!
     #init_plot <- eventReactive( input$trigger_df_1, { # when new data is uploaded
@@ -520,7 +521,15 @@ server <- function(session, input, output) {
             ggsave(file, plot = chosen_plot(), device = "pdf")
         }
     )
-    ####### end plotting server
+
+    
+    ###### analysis #####
+    # inputs: 
+    
+    
+    # outputs: 
+    ############### analysis functions
+    
 }
 
 ###### GUI #####
