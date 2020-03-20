@@ -923,6 +923,156 @@ fish_encounters %>%
   )
 
 ```
+```{r}
+model_all <- function(which_model, model_name, start_pars, win3d) {
+  
+  model_fit <- start_pars %>% fit_model_from_pars(which_model = which_model)
+  
+  df_BIC <- extract_model_element(model_fit, "glance", "BIC", model_name) # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+
+  df_models <- bind_rows( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+                      build_predictions(model_name, model_fit) )
+
+  tm_table_models <- model_tms_by_dRFU( df_models, win3d )
+
+  out_list <- list("model" = model_fit, 
+                   "df_BIC" = df_BIC, 
+                   "df_models" = df_models, 
+                   "tm_table_models" = tm_table_models$df_tma_mean,
+                   "tm_models_all" = tm_table_models$df_tma,
+                   "df_models_sgd1" = tm_table_models$df_pred_sgd1
+                   )
+}
+
+
+
+model_tms_by_dRFU <- function( df_models, win3d ) {
+  print("making model tms by drFU, calling sigmoid_2")
+  df_pred_sgd1 <- df_models  %>% # the model outcomes, with sgd1 added for all predictions within the nested data
+    group_by(well, which_model, component)  %>%
+    mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
+    nest() %>%
+    mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector())
+  
+  df_tma <- df_pred_sgd1 %>% # all calculated temperatures, with the rest of the data now removed
+    mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector()) %>%
+    ungroup() %>%
+    mutate(condition = map(data, get_condition) %>% as_vector()) %>%
+    select(-data) %>%
+    dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
+    pivot_wider(names_from = component, values_from  = tma)  %>%
+    group_by(condition, which_model) 
+  # %>%
+  #   add_sig2_col() %>% # if the sigmoid_2 column is missing, add in an empty one for it 
+  #   mutate(mean_tma1 = mean_no_NaN(sigmoid_1) %>% round(1),
+  #          mean_tma2 = mean_no_NaN(sigmoid_2) %>% round(1),
+  #          sd_tma1 = sd(sigmoid_1) %>% round(1),
+  #          sd_tma2 = sd(sigmoid_2) %>% round(1)) 
+  # 
+  # df_tma_mean <- df_tma %>% # the mean tmas only, for downloading and displaying
+  #   distinct(mean_tma1, mean_tma2, .keep_all = TRUE) %>%
+  #   ungroup() %>%
+  #   dplyr::select(c(condition, which_model, mean_tma1, sd_tma1, mean_tma2, sd_tma2))
+  # 
+  # out <- list("df_pred_sgd1" = df_pred_sgd1,
+  #             "df_tma" = df_tma,
+  #             "df_tma_mean" = df_tma_mean)
+}
+
+build_sig2 <- function(  data, model_pars, which_model) {
+  print("building sig2")
+  pars <- as.list(model_pars$estimate)
+  names(pars) <- model_pars$term
+  
+  Temperature_norm <- data %>%
+    select(Temperature_norm) %>%
+    unique() %>%
+    arrange()
+  
+  Temperature <- data %>%
+    select(Temperature) %>%
+    unique() %>%
+    arrange()
+  
+  pred_s <- pars$Asym2/(1 + exp((pars$xmid2 - Temperature_norm)/pars$scal2))*exp(pars$d2 * (Temperature_norm - pars$xmid2))
+  
+  tibble( Temperature = as_vector(Temperature),
+          Temperature_norm = as_vector(Temperature_norm),
+          pred = as_vector(pred_s),
+          value_norm = rep(NA, length(pred_s)),
+          which_model = rep(which_model, length(pred_s)),
+          component = rep("sigmoid_2", length(pred_s))
+  )
+}
+```
+
+```{r}
+start_pars <- readRDS("../../0_integrated_modules/values_start_pars.rds")
+df_fit <- readRDS("../../0_integrated_modules/values$df_fit.rds")
+which_model <- s1_model
+model_name <- "s1_pred"
+win3d <- 7
+
+  model_fit <- start_pars %>% fit_model_from_pars(which_model = which_model)
+  
+  df_BIC <- extract_model_element(model_fit, "glance", "BIC", model_name) # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+
+  df_models <- bind_rows( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
+                      build_predictions(model_name, model_fit) )
+```
+
+
+
+
+```{r}
+add_sig2_col <- function( data ) {
+  if ("sigmoid_2" %in% names(data)) {
+    data
+  } else {
+    data %>%
+      #ungroup() %>%
+      mutate(sigmoid_2 = map(sigmoid_1, function(x) {NA}) %>% as_vector())
+  }
+}
+
+model_tms_by_dRFU <- function( df_models, win3d ) {
+  print("making model tms by drFU, calling sigmoid_2")
+  df_pred_sgd1 <- df_models  %>% # the model outcomes, with sgd1 added for all predictions within the nested data
+    group_by(well, which_model, component)  %>%
+    mutate(sgd1_pred = sgolayfilt(pred, p = 3, n = find_sgolay_width( win3d ), m = 1)) %>%
+    nest() %>%
+    mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector())
+  
+  df_tma <- df_pred_sgd1 %>% # all calculated temperatures, with the rest of the data now removed
+    mutate(tma = map(data, Tm_by_dRFU_for_model) %>% as_vector()) %>%
+    ungroup() %>%
+    mutate(condition = map(data, get_condition) %>% as_vector()) %>%
+    select(-data) %>%
+    dplyr::filter(component %in% c("sigmoid_1", "sigmoid_2")) %>%
+    pivot_wider(names_from = component, values_from  = tma)  %>%
+    group_by(condition, which_model)  %>%
+     add_sig2_col() %>% # if the sigmoid_2 column is missing, add in an empty one for it 
+    mutate(mean_tma1 = mean_no_NaN(sigmoid_1) %>% round(1),
+           mean_tma2 = mean_no_NaN(sigmoid_2) %>% round(1),
+           sd_tma1 = sd(sigmoid_1) %>% round(1),
+           sd_tma2 = sd(sigmoid_2) %>% round(1))
+
+  df_tma_mean <- df_tma %>% # the mean tmas only, for downloading and displaying
+    distinct(mean_tma1, mean_tma2, .keep_all = TRUE) %>%
+    ungroup() %>%
+    dplyr::select(c(condition, which_model, mean_tma1, sd_tma1, mean_tma2, sd_tma2))
+
+  out <- list("df_pred_sgd1" = df_pred_sgd1,
+              "df_tma" = df_tma,
+              "df_tma_mean" = df_tma_mean)
+}
+
+
+  tm_table_models <- model_tms_by_dRFU( df_models, win3d )
+
+model_all(s1_model, "s1_pred", start_pars, win3d)
+```
+
 
 
 

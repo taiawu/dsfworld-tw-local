@@ -770,7 +770,8 @@ add_sig2_col <- function( data ) {
     data
   } else {
     data %>%
-      mutate(sigmoid_2 = map(.$sigmoid_1, function(x) {NA}) %>% as_vector())
+      mutate(sigmoid_2 = map(sigmoid_1, function(x) {NA}) %>% as_vector()) 
+      #mutate(sigmoid_2 = map(.$sigmoid_1, function(x) {NA}) %>% as_vector()) # for when the data is not grouped
   }
 }
 
