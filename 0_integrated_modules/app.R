@@ -529,9 +529,8 @@ server <- function(session, input, output) {
     
     
     # outputs: 
-    ############### analysis functions
+    ################# analysis functions #####
     
-    # tm determination server  ---------------------------  
     observeEvent(values$df, {values$df_fit <- values$df} ) # if values$df changes, re-do the fitting. When layouts are updated this will trigger unnecessary re-fitting, but the fitting is fast enough that the extra computations are worth the added simplicty of doing it this way
     
     ## by tma
@@ -657,6 +656,8 @@ server <- function(session, input, output) {
         values$df_models <- values$s1_list$df_models
         values$df_BIC_models <- values$s1_list$df_BIC
         values$df_tm_models <- values$s1_list$tm_table_models
+        write_rds(values$df_tm_models, "values_df_tm_models_s1.rds")
+       # "tm_models_all" = tm_table_models$df_tma,
 
         values$df_tm_models_table <- values$df_tm_models %>%
             dplyr::filter( which_model == "s1_pred"  ) %>%
@@ -710,14 +711,15 @@ server <- function(session, input, output) {
                     values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_d_list$tm_table_models)
                 }}
             write_rds(values$model_list , "values_model_list.rds")
+            write_rds(values$df_tm_models, "values_df_tm_models.rds")
             # write_rds(values$df_models, "values_df_models.rds")
             # write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
             # write_rds(values$df_tm_models, "values_df_tm_models.rds")
             # write_rds(values$df_models, "values_df_models.rds")
-            # write_rds(values$s1_list, "values_s1_list.rds")
-            # write_rds(values$s1_d_list, "values_s1_d_list.rds")
-            # write_rds(values$s2_list, "values_s2_list.rds")
-            # write_rds(values$s2_d_list, "values_s2_d_list.rds")
+            write_rds(values$s1_list, "values_s1_list.rds")
+            write_rds(values$s1_d_list, "values_s1_d_list.rds")
+            write_rds(values$s2_list, "values_s2_list.rds")
+            write_rds(values$s2_d_list, "values_s2_d_list.rds")
 
             #update the tm table for display df_tm_models_table <- df_tm_models %>%
             model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") # doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
@@ -844,7 +846,110 @@ server <- function(session, input, output) {
 
     ##### end 4_analyze appler server 
     
-}
+
+    ##### downloads
+    # Reactive value for selected dataset ----
+    # make some download formats
+    
+    df_mean_sd <- reactive({values$df %>% # the raw data
+            unnest(data) %>%
+            select(c(condition, Temperature, mean, sd)) %>%
+            distinct(.keep_all = TRUE) %>%
+            pivot_wider(names_from = condition, values_from = c(mean, sd)) 
+    })
+    
+    df_norm_mean_sd <- reactive({ values$df %>% # the normalized data
+            unnest(data) %>%
+            select(c(condition, Temperature, mean_norm, sd_norm)) %>%
+            distinct(.keep_all = TRUE) %>%
+            pivot_wider(names_from = condition, values_from = c(mean_norm, sd_norm))
+    })
+    
+    df_value <- reactive({ values$df %>% # the normalized data
+        unnest(data)  %>%
+        select(c(condition,well,  Temperature, value))%>%
+        distinct(.keep_all = TRUE) %>%
+        pivot_wider(names_from = c(well, condition), values_from = c(value))})
+    
+    df_value_norm <- reactive({ values$df %>% # the normalized data
+        unnest(data)  %>%
+        select(c(condition, well,  Temperature, value_norm))%>%
+        distinct(.keep_all = TRUE) %>%
+        pivot_wider(names_from = c(well, condition), values_from = c(value_norm)) })
+    
+    pred_models <- reactive({ make_wide_preds( values$df_models ) })
+    
+    datasetInput1 <- reactive({
+        switch(input$dataset1,
+               "Tma by dRFU" = tma_by_dRFU(),
+               "Tma by best fit" = values$df_BIC_models_p, #head(mtcars),
+               "Replicate-averaged raw data" = df_mean_sd(),
+               "Replicate-averaged normalized data" = df_norm_mean_sd(),
+               "RFU data with fits" = pred_models() 
+        )
+    })
+    
+    datasetInput2 <- reactive({
+        switch(input$dataset2,
+               "Tma by dRFU, no replicate averaging"= values$df_tms, #head(mtcars) ,
+               "Tma by best fit, no replicate averaging"= values$df_BIC_models_p, # ,
+               "Reformatted raw data"= values$data_raw, #head(mtcars) ,
+               "Normalized raw data"= df_value ,
+               "First derivative of raw data" = df_value_norm
+               
+        )
+    })
+    
+    datasetInput3 <- reactive({ # raw outputs from DSFworld
+        switch(input$dataset3,
+               "Labeled, nested data" = values$df,
+               "All fitted models, full results" = values$df_models,
+               "All fitted models, BIC rankings" = values$df_BIC_models,
+               "All fitted models, Tmas" = values$df_tm_models,
+               "All fitted models, all outputs" = values$model_list
+        )
+    })
+
+    
+    # # Table of selected dataset ----
+    output$table_set1 <- renderTable(datasetInput1(), options = list(scrollX = TRUE, scrollY = 400, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))#renderDataTable(datasetInput1(), options = list(scrollX = TRUE, scrollY = 400, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
+    
+    output$table_set2 <- renderTable(datasetInput2(), options = list(scrollX = TRUE, scrollY = 400, scrollCollapse = TRUE, paging = FALSE, dom = 'tr')) #renderDataTable(datasetInput2(), options = list(scrollX = TRUE, scrollY = 400, scrollCollapse = TRUE, paging = FALSE, dom = 'tr'))
+    
+    
+    # Downloadable csv of selected dataset ----
+    output$downloadData1 <- downloadHandler(
+        filename = function() {
+            paste(input$dataset1_download_name, "-", input$dataset1, ".csv", sep = "")
+        },
+        content = function(file) {
+            write.csv(datasetInput1(), file, row.names = FALSE)
+        }
+    )
+    
+    output$downloadData2 <- downloadHandler(
+        filename = function() {
+            paste(input$dataset2_download_name, "-", input$dataset2, ".csv", sep = "")
+        },
+        content = function(file) {
+            write.csv(datasetInput2(), file, row.names = FALSE)
+        }
+    )
+    
+    output$downloadData3 <- downloadHandler(
+        filename = function() {
+            paste(input$dataset3_download_name, "-", input$dataset3, ".rds", sep = "")
+        },
+        content = function(file) {
+            write_rds(datasetInput3(), file)
+        }
+    )
+    
+    ##### end downloads
+    
+    
+    
+    } # end server
 
 ###### GUI #####
 ui <- navbarPage(useShinyalert(),
@@ -1268,8 +1373,14 @@ ui <- navbarPage(useShinyalert(),
                                                    # Main panel for displaying outputs 
                                                    mainPanel(
                                                        tabsetPanel(
-                                                           tabPanel("Preview: quick downloads", dataTableOutput("table_set1"), style = "overflow-x: scroll;"),
-                                                           tabPanel("Preview: supplemental files", dataTableOutput("table_set2"), style = "overflow-x: scroll;")
+                                                           tabPanel("Preview: quick downloads", 
+                                                                    tableOutput("table_set1"),  
+                                                                    #dataTableOutput("table_set1"), 
+                                                                    style = "overflow-x: scroll;overflow-y: scroll;"),
+                                                           tabPanel("Preview: supplemental files", 
+                                                                    tableOutput("table_set2"),  
+                                                                    #dataTableOutput("table_set2"), 
+                                                                    style = "overflow-x: scroll;")
                                                        )
                                                    ) # end main panel
                                                ) # end sidebarLayout

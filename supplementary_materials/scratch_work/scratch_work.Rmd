@@ -802,13 +802,13 @@ df_mod_tm_s1
 # values_df_BIC_best_post_click.rds
 # values_df_models.rds
 
-outlist1 <- readRDS("../4_analyze/outlist1.rds") # closures and functions used to create the fits
-df_models <- readRDS("../4_analyze/values_df_models.rds")
-df_BIC_models <- readRDS("../4_analyze/values_df__BIC_models.rds")
-df_selected_models <- readRDS("../4_analyze/values_df_tm_models_table.rds")
-df_tm_table <- readRDS("../4_analyze/values_df_tm_models.rds")
+outlist1 <- readRDS("../../4_analyze/outlist1.rds") # closures and functions used to create the fits
+df_models <- readRDS("../../4_analyze/values_df_models.rds")
+df_BIC_models <- readRDS("../../4_analyze/values_df__BIC_models.rds")
+df_selected_models <- readRDS("../../4_analyze/values_df_tm_models_table.rds")
+df_tm_table <- readRDS("../../4_analyze/values_df_tm_models.rds")
 
-values_df <- readRDS("../4_analyze/values_df_with_layout.rds")
+values_df <- readRDS("../../4_analyze/values_df_with_layout.rds")
 
 values_df %>%
   unnest(data)
@@ -842,6 +842,31 @@ df_mean_sd
 values_df %>% unnest(data)
 ```
 ```{r}
+tm_table_all_s1 <- readRDS("../../0_integrated_modules/values_df_tm_models_table.rds")
+tm_table_all<- readRDS("../../0_integrated_modules/values_df_tm_models_s1.rds")
+
+tm_table_all
+tm_table_all_s1
+```
+```{r}
+tm_table_all <- readRDS("../../0_integrated_modules/values_s2_list.rds")
+tm_table_all$df_models_sgd1 %>%
+  recode()
+
+
+df_BIC_models <- readRDS("../../4_analyze/values_df__BIC_models.rds")
+df_BIC_models
+
+tm_table_all$df_BIC
+# values_s2_d_list.rds
+# values_s1_list.rds
+# values_s1_d_list.rds
+# values_model_list.rds
+# values_df_tm_models.rds
+```
+
+
+```{r}
 df_mean_sd <- values_df %>% # the raw data
               unnest(data) %>%
               select(c(condition, Temperature, mean, sd)) %>%
@@ -858,26 +883,75 @@ df_mean_sd
 df_norm_mean_sd
 ```
 ```{r}
-df_models_out <- df_models %>%
+# values_df <- readRDS("../../4_analyze/values_df_with_layout.rds")
+
+df_value <- values_df %>% # the normalized data
+              unnest(data)  %>%
+               select(c(condition,well,  Temperature, value))%>%
+               distinct(.keep_all = TRUE) %>%
+               pivot_wider(names_from = c(well, condition), values_from = c(value))
+
+df_value_norm <- values_df %>% # the normalized data
+              unnest(data)  %>%
+               select(c(condition, well,  Temperature, value_norm))%>%
+               distinct(.keep_all = TRUE) %>%
+               pivot_wider(names_from = c(well, condition), values_from = c(value_norm))
+
+df_norm_mean_sd 
+df_value_norm
+```
+
+
+```{r}
+make_wide_preds <- function( df_models ) {
+  df_models_out <- df_models %>%
                   select(c(well, Temperature, condition, which_model, component, pred)) %>%
                   pivot_wider(names_from = c(which_model, component), values_from = pred) 
-# %>%
-#   left_join(df_models %>% select(c(Temperature, condition, value_norm)))
 
-# df_models_out_val <- df_models %>%
-#                   select(c(well, Temperature, condition, value_norm))  %>%
-#                   left_join(df_models_out, by = c("Temperature", "condition"))
-# %>%
-#                   left_join(df_models_out, by = "well")
-# # %>%
-#                   pivot_wider(names_from = c(which_model, component), values_from = pred)
+df_models_vals <- df_models %>%
+                  select(c(well, Temperature, value_norm)) %>%
+                  group_by(well, Temperature) %>%
+                  distinct(value_norm, .keep_all = TRUE) %>%
+                  filter(is.na(value_norm) == FALSE)
 
-df_models_out
-df_models %>% select(c(Temperature, condition, value_norm))
-#df_models_out_val
 
-df_models$component %>% table()
+out <- left_join(df_models_out, df_models_vals, by = c("Temperature","well"))
+
+out
+}
+
+make_wide_preds( df_models ) 
+              
 ```
+
+```{r}
+df_best_model <- readRDS("../../0_integrated_modules/values_df_tm_models_table.rds")
+df_best_model
+```
+
+
+```{r}
+    datasetInput1 <- reactive({
+        switch(input$dataset1,
+               "Tma by dRFU" = tma_by_dRFU(),
+               "Tma by best fit" = head(mtcars),
+               "Replicate-averaged raw data" = df_mean_sd(),
+               "Replicate-averaged normalized data" = df_norm_mean_sd(),
+               "RFU data with fits" = pred_models() 
+        )
+    })
+    
+    datasetInput2 <- reactive({
+        switch(input$dataset2,
+               "Tma by dRFU, no replicate averaging"= head(mtcars) ,
+               "Tma by best fit, no replicate averaging"= head(mtcars) ,
+               "Reformatted raw data"= head(mtcars) ,
+               "Normalized raw data"= head(mtcars) ,
+               "First derivative of raw data" = head(mtcars) 
+        )
+    })
+```
+
 ```{r}
 model_list_s1 <- readRDS("../4_analyze/values_model_list_s1_only.rds")
 model_list_all <- readRDS("../4_analyze/values_model_list.rds")
@@ -909,6 +983,8 @@ warpbreaks %>%
     values_fn = list(breaks = mean)
   )
 ```
+
+
 ```{r}
 
 fish_encounters
@@ -923,6 +999,9 @@ fish_encounters %>%
   )
 
 ```
+
+
+
 ```{r}
 model_all <- function(which_model, model_name, start_pars, win3d) {
   
@@ -1020,8 +1099,6 @@ win3d <- 7
   df_models <- bind_rows( extract_preds(model_fit, model_name), # these will be created for s1, the default fit, and the fastest one. they will be added to for each additional model
                       build_predictions(model_name, model_fit) )
 ```
-
-
 
 
 ```{r}

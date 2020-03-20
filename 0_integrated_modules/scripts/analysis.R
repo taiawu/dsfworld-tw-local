@@ -1023,3 +1023,22 @@ facet_func2 <- function(df,
   
   p
 }
+
+
+### formatting for download
+make_wide_preds <- function( df_models ) {
+  df_models_out <- df_models %>%
+    select(c(well, Temperature, condition, which_model, component, pred)) %>%
+    pivot_wider(names_from = c(which_model, component), values_from = pred) 
+  
+  df_models_vals <- df_models %>%
+    select(c(well, Temperature, value_norm)) %>%
+    group_by(well, Temperature) %>%
+    distinct(value_norm, .keep_all = TRUE) %>%
+    filter(is.na(value_norm) == FALSE)
+  
+  
+  out <- left_join(df_models_out, df_models_vals, by = c("Temperature","well"))
+  
+  out
+}
