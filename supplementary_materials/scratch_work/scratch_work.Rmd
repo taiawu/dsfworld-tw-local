@@ -1150,6 +1150,32 @@ model_tms_by_dRFU <- function( df_models, win3d ) {
 model_all(s1_model, "s1_pred", start_pars, win3d)
 ```
 
+```{r}
+head(mtcars) %>%
+  rename(migp = "mpg")
+```
+
+```{r}
+df_BIC_models_shiny <- readRDS("../../4_analyze/values_df__BIC_models.rds") %>% 
+  cond_df_BIC_for_plot (  )
+
+df_BIC_models_shiny %>%
+              rename(`Best fit` = "is_min") %>%
+            mutate(Fit = recode(which_model,
+                            s1_pred = "Fit 1",
+                            s1_d_pred = "Fit 2",
+                            s2_pred = "Fit 3",
+                            s2_d_pred = "Fit 4")) %>%
+            select(c(well, condition, BIC, Fit, `Best fit`))
+```
+
+```{r}
+all(c("condition", "Temperature", "mean", "sd") %in% c("condition", "Temperature", "mean", "sd")) 
+```
+
+
+
+
 
 
 

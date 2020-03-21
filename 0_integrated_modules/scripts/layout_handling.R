@@ -73,7 +73,7 @@ join_layout_nest <- function(by_well, layout) {
   by_well_ <- ensure_standardized_wells(by_well) # this will always be fresh, un-layout-joined dataframe
   layout_ <- ensure_standardized_wells(layout)
   l_names <- names(layout_)
-  dup_cols <- l_names[!l_names %in% c("well_", "well_f_", "row_", "col_")]
+  dup_cols <- l_names[!l_names %in% c("well_", "well_f_", "row_", "col_")]# columns which are already in the layout
   #dup_cols <- names(layout_)[!c(names(layout_) %in% c("well_", "well_f_", "row_", "col_"))]
   
   common_cols <- c("well","well_", "well_f_", "row_", "col_", "row", "column") %>%
@@ -86,20 +86,30 @@ join_layout_nest <- function(by_well, layout) {
   } else { # if "condition" is present in the layout
     if (  all(l_names[!l_names == "condition"] %in% common_cols) == TRUE ) { # if "condition" is the only column unique to the layout
       common_cols <- c("well_", "well_f_", "row_", "col_", "row", "column") # retain the well column
+      layout_ <- layout_ %>%
+        # select(-condition) %>%
+        # unite("condition", -one_of(common_cols), remove = FALSE) %>%
+        mutate_if(is.factor, as.character)
+      
       print("all names in common cols ZZ")
-    } ### IX THIS--laout needs to have something left to combine
-  }
-  
+    } else { # if a layout has been added 
     layout_ <- layout_ %>%
                select(-condition) %>%
                unite("condition", -one_of(common_cols), remove = FALSE) %>%
                mutate_if(is.factor, as.character)
+    }
+  }
+
+    # layout_ <- layout_ %>%
+    #            select(-condition) %>%
+    #            unite("condition", -one_of(common_cols), remove = FALSE) %>%
+    #            mutate_if(is.factor, as.character)
     # %>% # clear the existing condition column
     #            unite("condition", -one_of(common_cols), remove = FALSE) 
   #   %>% # create a unique column, used to define groups after averaging
   #              mutate_if(is.factor, as.character)
    
-  
+  # join and re-average the data according to the new conditions
   by_well_ %>%
     unnest_legacy() %>%
     dplyr::select(-one_of(dup_cols )) %>% # if it's already in layout, drop it

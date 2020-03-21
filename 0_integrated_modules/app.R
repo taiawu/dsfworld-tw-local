@@ -152,6 +152,7 @@ server <- function(session, input, output) {
         )
     }) # read the input file
     
+    move_to_analysis <- FALSE # set this as false to start
     observeEvent(data_raw(), {
         #values$data_raw <- data_raw()
         
@@ -164,22 +165,37 @@ server <- function(session, input, output) {
             n2r <<- make_temp_n2r(range(low_T:high_T)) #make_temp_n2r(range(values$data$Temperature)) # an example of how this could be used
             win3d <<- floor(3/((n2r(1) - n2r(0))/n_meas))
             if ( win3d < 5 ) { win3d <<- 5 }
-            
             sgfilt_nest <<- sgfilt_set_n(n_ = find_sgolay_width( win3d ))
+            move_to_analysis <<- TRUE
         },   
-        error = function(e){
+        error = function(e) {
             print("win3 errored! setting win3d to 7")
             win3d <<- 7
             sgfilt_nest <<- sgfilt_set_n( n_ = find_sgolay_width( 7 ) )
+            move_to_analysis <<- FALSE
+        }, warning = function(w) {
+            print("win3 warning! setting win3d to 7")
+            win3d <<- 7
+            sgfilt_nest <<- sgfilt_set_n( n_ = find_sgolay_width( 7 ) ) 
+            move_to_analysis <<- FALSE
         })
     }) # write to values
     
-    observeEvent(data_raw(), { # ultimately, observe the transfer to the analysis page
+    # observeEvent({ id$inTabset_analysis
+    #                input$jumpToAnalysis }, { # ultimately, observe the transfer to the analysis page
+    observeEvent({ data_raw() }, { # ultimately, observe the transfer to the analysis page
         req(data_raw()) # but leave this requirement as is
+        if (move_to_analysis == FALSE) {
+            shinyalert("Please ensure that your data is formatted correctly", "In the 'upload data' tab, you data should be displayed with Temperature in the first column, and RFU data in the columns to the right.")  
+        }
+        
+        req(move_to_analysis == TRUE)
         tryCatch({
+            print("assigning values$df")
                     values$df <- nest_raw(data_raw()) %>%  add_standardized_wells() # REVISIT1 # active dataframe, used for plotting and calculations
                     values$df_1 <- nest_raw(data_raw()) %>%  add_standardized_wells()  # REVISIT1 # needs an option for when there are non-well names in the data
-        }, error = function(e) {
+                    min(unnest(values$df)$Temperature) # this fails if there is something wrong with data_raw()
+                    }, error = function(e) {
             shinyalert("Please ensure that your data is formatted correctly", "In the 'upload data' tab, you data should be displayed with Temperature in the first column, and RFU data in the columns to the right.")
         })
     })
@@ -189,7 +205,7 @@ server <- function(session, input, output) {
         req(input$uploaded_file)
         tryCatch(
             data_raw(),
-            error = function(e){
+            error = function(e) {
                 shinyalert("File needs pre-formatting!", "Please select your instrument from 'Supported Reformatting'. Or, if you don't see your instrument there, please format your data as shown in the downloadable template and upload again.")
             }
         )
@@ -393,7 +409,7 @@ server <- function(session, input, output) {
     
     # update and re-render the plot only when the update-plot button is clicked!
     #init_plot <- eventReactive( input$trigger_df_1, { # when new data is uploaded
-    plot_initial <- eventReactive( data_raw(),  { # only when the "update plot" button is clicked, update the plot 
+    plot_initial <- eventReactive( values$df,  { # only when the "update plot" button is clicked, update the plot 
         print("plot changed")
         req(values$df) # only render the plot if there is data
         
@@ -533,7 +549,7 @@ server <- function(session, input, output) {
     
     observeEvent(values$df, {values$df_fit <- values$df} ) # if values$df changes, re-do the fitting. When layouts are updated this will trigger unnecessary re-fitting, but the fitting is fast enough that the extra computations are worth the added simplicty of doing it this way
     
-    ## by tma
+    ## by dRFU
     observeEvent( values$df_fit, {
         # starting from values$df gives this calculation a fresh slate should the user re-format their data multiple times
         values$df_tms <- values$df_fit %>% #df_int %>% # add the first derivative Tms
@@ -633,7 +649,7 @@ server <- function(session, input, output) {
                 "peak_finder_nest" = peak_finder_nest,
                 "sgfilt_nest" = sgfilt_nest
             )
-            write_rds(outlist1, "outlist1.rds")
+            #write_rds(outlist1, "outlist1.rds")
         },   
         error = function(e) {
             print("win3 errored! setting win3d to 7")
@@ -647,16 +663,20 @@ server <- function(session, input, output) {
     # fit the requested models
     observeEvent(values$df_fit, {
         values$start_pars <- get_start_pars(values$df_fit)
-        write_rds(values$df_fit, "values$df_fit.rds")
-        write_rds(values$start_pars, "values_start_pars.rds")
+        # write_rds(values$df_fit, "values$df_fit.rds")
+        # write_rds(values$start_pars, "values_start_pars.rds")
+        
         # first, fit the s1 model
         # this will over-write the summary dataframes, re-setting the models to follow
         values$s1_list <- model_all(s1_model, "s1_pred", values$start_pars, win3d)
+        
         values$model_list <- list("s1_list" = values$s1_list)
         values$df_models <- values$s1_list$df_models
         values$df_BIC_models <- values$s1_list$df_BIC
         values$df_tm_models <- values$s1_list$tm_table_models
-        write_rds(values$df_tm_models, "values_df_tm_models_s1.rds")
+        values$df_BIC_models_p <- values$df_BIC_models %>%
+                                        cond_df_BIC_for_plot (  ) 
+       #  write_rds(values$df_tm_models, "values_df_tm_models_s1.rds")
        # "tm_models_all" = tm_table_models$df_tma,
 
         values$df_tm_models_table <- values$df_tm_models %>%
@@ -664,7 +684,7 @@ server <- function(session, input, output) {
             plyr::mutate( which_model = grep_and_gsub(.$which_model, c("s1_pred", "s1_d_pred", "s2_pred","s2_d_pred"), c("Fit 1", "Fit 2", "Fit 3", "Fit 4"), c("Other")))  %>% # move this to later, for the for-display table only!
             set_names(c("Condition", "Model", "Tma 1", "Tma 1 SD", "Tma 2", "Tma 2 SD")) %>%
             discard(~all(is.na(.x))) #%>% # get rid of the columns which are all NA (true if the model is not selected)
-        write_rds(values$df_tm_models_table, "values_df_tm_models_table.rds")
+        # write_rds(values$df_tm_models_table, "values_df_tm_models_table.rds")
         # write_rds(values$s1_list, "values_s1_list.rds")
 
         # if new data is uploaded, reset all of the buttons as well. perhaps we should set these to watch values$data (unnamed), so it doesn't get over-written by renaming, but i'd need to think more carefully about how to incorporate the names downstream....
@@ -710,16 +730,16 @@ server <- function(session, input, output) {
                     values$df_BIC_models <- values$df_BIC_models %>% bind_rows(values$s2_d_list$df_BIC)
                     values$df_tm_models <- values$df_tm_models %>% bind_rows(values$s2_d_list$tm_table_models)
                 }}
-            write_rds(values$model_list , "values_model_list.rds")
-            write_rds(values$df_tm_models, "values_df_tm_models.rds")
-            # write_rds(values$df_models, "values_df_models.rds")
-            # write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
+            # write_rds(values$model_list , "values_model_list.rds")
             # write_rds(values$df_tm_models, "values_df_tm_models.rds")
-            # write_rds(values$df_models, "values_df_models.rds")
-            write_rds(values$s1_list, "values_s1_list.rds")
-            write_rds(values$s1_d_list, "values_s1_d_list.rds")
-            write_rds(values$s2_list, "values_s2_list.rds")
-            write_rds(values$s2_d_list, "values_s2_d_list.rds")
+            # # write_rds(values$df_models, "values_df_models.rds")
+            # # write_rds(values$df_BIC_models, "values_df__BIC_models.rds")
+            # # write_rds(values$df_tm_models, "values_df_tm_models.rds")
+            # # write_rds(values$df_models, "values_df_models.rds")
+            # write_rds(values$s1_list, "values_s1_list.rds")
+            # write_rds(values$s1_d_list, "values_s1_d_list.rds")
+            # write_rds(values$s2_list, "values_s2_list.rds")
+            # write_rds(values$s2_d_list, "values_s2_d_list.rds")
 
             #update the tm table for display df_tm_models_table <- df_tm_models %>%
             model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") # doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
@@ -851,11 +871,20 @@ server <- function(session, input, output) {
     # Reactive value for selected dataset ----
     # make some download formats
     
-    df_mean_sd <- reactive({values$df %>% # the raw data
-            unnest(data) %>%
+    df_mean_sd <- reactive({ 
+    df <- values$df %>% # the raw data
+          unnest(data) # 
+    if (all(c("condition", "Temperature", "mean", "sd") %in% names(df))  ) {
+        df %>% 
             select(c(condition, Temperature, mean, sd)) %>%
             distinct(.keep_all = TRUE) %>%
-            pivot_wider(names_from = condition, values_from = c(mean, sd)) 
+            pivot_wider(names_from = condition, values_from = c(mean, sd))
+        } else {
+            df %>% 
+                select(c(condition, Temperature, value)) %>%
+                distinct(.keep_all = TRUE) %>%
+                pivot_wider(names_from = condition, values_from = c(value))
+    }
     })
     
     df_norm_mean_sd <- reactive({ values$df %>% # the normalized data
@@ -879,10 +908,35 @@ server <- function(session, input, output) {
     
     pred_models <- reactive({ make_wide_preds( values$df_models ) })
     
+    df_BIC_models_for_download <- reactive({
+        values$df_BIC_models_p  %>%
+                                rename(`Best fit` = "is_min") %>%
+                                mutate(Fit = recode(which_model,
+                                                s1_pred = "Fit 1",
+                                                s1_d_pred = "Fit 2",
+                                                s2_pred = "Fit 3",
+                                                s2_d_pred = "Fit 4")) %>%
+                                select(c(well, condition, BIC, Fit, `Best fit`))
+            
+        
+    })
+    
+    tma_by_dRFU_no_rep_avg <- reactive({
+        if ("condition" %in% names(values$df_tms)) {
+            # make the averaged table
+            values$df_tms %>%
+                select(well, condition, dRFU_tma)  
+        
+        } else {
+            values$df_tms %>%
+                select(well, dRFU_tma)  
+        }
+    })
+    
     datasetInput1 <- reactive({
         switch(input$dataset1,
                "Tma by dRFU" = tma_by_dRFU(),
-               "Tma by best fit" = values$df_BIC_models_p, #head(mtcars),
+               "Tma by best fit" = values$df_tm_models_table, 
                "Replicate-averaged raw data" = df_mean_sd(),
                "Replicate-averaged normalized data" = df_norm_mean_sd(),
                "RFU data with fits" = pred_models() 
@@ -891,12 +945,11 @@ server <- function(session, input, output) {
     
     datasetInput2 <- reactive({
         switch(input$dataset2,
-               "Tma by dRFU, no replicate averaging"= values$df_tms, #head(mtcars) ,
-               "Tma by best fit, no replicate averaging"= values$df_BIC_models_p, # ,
-               "Reformatted raw data"= values$data_raw, #head(mtcars) ,
-               "Normalized raw data"= df_value ,
-               "First derivative of raw data" = df_value_norm
-               
+               "Tma by dRFU, no replicate averaging"= tma_by_dRFU_no_rep_avg(), #head(mtcars) ,
+               "Tma by best fit, no replicate averaging"= df_BIC_models_for_download(), # ,
+               "Reformatted raw data"= data_raw(), #head(mtcars) ,
+               "Normalized raw data"= df_value_norm(),
+               "First derivative of raw data" = df_value_norm()
         )
     })
     
