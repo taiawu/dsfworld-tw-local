@@ -1,0 +1,12 @@
+name: dsfworld
+title: dsfworld
+username:
+account: gestwickilab
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 1949180
+bundleId: 2905031
+url: https://gestwickilab.shinyapps.io/dsfworld/
+when: 1584785902.19055
+asMultiple: FALSE
+asStatic: FALSE

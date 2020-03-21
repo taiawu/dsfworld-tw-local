@@ -1,4 +1,4 @@
-# 0_inegrated_modules/app.R
+# 0_integrated_modules/app.R
 library(quantmod) # contains the findValleys function, which maybe we should just extract and put verbatim in a source file instead of loading this whole thing...?
 library(minpack.lm) # contains the nlsLM function, which we use for our fitting
 library(modelr) # used in both the data modeling and the analysis model fitting 
@@ -86,11 +86,21 @@ server <- function(session, input, output) {
     ####### data upoading functions ####
     output$download_sample_input <- downloadHandler(
         filename = function() {
-            paste('dsfworld_upload_format.csv', sep='')
+            paste('dsfworld_sample_raw_data_format.csv', sep='')
         },
         content = function(file) {
-            read_csv("sample_file.csv")
-            write.csv(read_csv("sample_file.csv"), file, row.names = FALSE)
+            read_csv("dsfworld_sample_raw_data_format.csv")
+            write.csv(read_csv("dsfworld_sample_raw_data_format.csv"), file, row.names = FALSE)
+        }
+    )
+    
+    output$sample_layout_file <- downloadHandler(
+        filename = function() {
+            paste('dsfworld_example_layout.csv', sep='')
+        },
+        content = function(file) {
+            read_csv("dsfworld_example_layout.csv")
+            write.csv(read_csv("dsfworld_example_layout.csv"), file, row.names = FALSE, fileEncoding = "UTF-8")
         }
     )
     
@@ -1047,7 +1057,7 @@ ui <- navbarPage(useShinyalert(),
                                  tags$hr(style="border-color: black;"),
                                  p("Welcome to DSF world", style = "font-family: 'Avenir Next'; font-size: 50px",align = "center"),
                                  tags$hr(style="border-color: black;"),
-                                 shiny::div(tags$img(src = "dye_request_image_v0_small.png", width = "500px"), style = "text-align: center;"),
+                                 shiny::div(tags$img(src = "dye_request_image_v0_small.png", width = "100%"), style = "text-align: center;"),
                                  p("Welcome to DSF world", style = "font-family: 'Avenir Next'; font-size: 15px; color: white",align = "center"),
                                  p("This website was created and is maintained by the Gestwicki lab at UCSF.", style = "font-family: 'Avenir Next'; font-size: 12px",align = "center"),
                                  p("email - dsfworlducsf@gmail.com", style = "font-family: 'Avenir Next'; font-size: 12px",align = "center"),
@@ -1149,7 +1159,7 @@ ui <- navbarPage(useShinyalert(),
                                             ),
                                             mainPanel(
                                                 p("Welcome to DSF world", style = "font-family: 'Avenir Next'; font-size: 8px; color: white",align = "center"),
-                                                shiny::div(tags$img(src = "20191108_dsfworld_modeling_scheme_v0.png", width = "700px"), style = "text-align: center;"),
+                                                shiny::div(tags$img(src = "20191108_dsfworld_modeling_scheme_v0.png", width = "100%"), style = "text-align: center;"),
                                                 p("Welcome to DSF world", style = "font-family: 'Avenir Next'; font-size: 8px; color: white",align = "center"),
                                                 plotOutput("plot_model", width = "100%", height = "400px")
                                             ))
@@ -1260,7 +1270,7 @@ ui <- navbarPage(useShinyalert(),
                                                                                                   p("Use the template below to create a layout file for your experiment. Each plate in the layout file defines a new experimental variable (e.g. compound, pH, concentration), with the varible name provided in the first column of the layout file. You can define any number of variables by adding additional plates to the layout file. Using this method, data can be visualized by user-defined variables (e.g. color by concentration).", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                   p("Layouts are connected to data by well name, so your data must have a 'well' column to use this feature.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                   p("For more information, see the instructions tab.", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
-                                                                                                  downloadButton("sample_layout_file", p("Download layout template", style = "font-family: 'Avenir Next'; font-size: 14px; color: black",align = "center")), #
+                                                                                                  downloadButton("sample_layout_file", p("Download example layout", style = "font-family: 'Avenir Next'; font-size: 14px; color: black",align = "center")), #
                                                                                                   p("...", style = "font-family: 'Avenir Next'; font-size: 12px; color: white",align = "center"),
                                                                                                   fileInput("layout_file", p("Upload your csv layout file", style = "font-family: 'Avenir Next'; font-size: 12px; color: black",align = "center"),
                                                                                                             accept = c(
