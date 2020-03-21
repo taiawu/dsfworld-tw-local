@@ -1173,6 +1173,65 @@ df_BIC_models_shiny %>%
 all(c("condition", "Temperature", "mean", "sd") %in% c("condition", "Temperature", "mean", "sd")) 
 ```
 
+```{r}
+  df %>%
+    mutate(row_ = parse_well_vec(.$well)$row,
+           col_ = parse_well_vec(.$well)$col) %>%
+    mutate(well_ = map2(.$row_, .$col_, paste0) %>% as_vector()) %>%
+    mutate(well_f_ = factor(.$well_, levels = make_well_names("ROWS", "1"))) 
+```
+
+```{r}
+parse_well_vec <- function( well_vec ){
+  col <- parse_number(well_vec) %>% as.character() # pull out all numbers. if no numbers, 
+  row <- str_remove(well_vec, col %>% replace_na(replace = "1"))
+  
+  l <- list(
+    col =  col,
+    row = row %>% str_to_upper(locale = "en") %>% as_vector()
+  )
+  l
+}
+```
+
+```{r}
+parse_number("ABC1234")
+str_extract_all("ABC1234")
+
+well_vec <- c("A1", "B2", "whatthiswhy", "1345")
+num <- parse_number(well_vec) %>% as.character() %>% replace_na(replace = "1") 
+str_remove(well_vec, num)
+```
+
+```{r}
+well_vec <- c("A1", "B2", "whatthiswhy", "1345")
+num <- parse_number(well_vec) %>% as.character() %>% replace_na(replace = "1") 
+str_remove(well_vec, num)
+
+
+```
+
+
+
+
+```{r}
+data_raw <- read_csv("../../0_integrated_modules/sample_file.csv") %>% nest_raw()
+
+data_raw %>% 
+    mutate(row_ = parse_well_vec(.$well)$row,
+           col_ = parse_well_vec(.$well)$col)
+
+well_vec <- c("A1", "B2", "whatthiswhy", "1345")
+well_vec 
+
+parse_well_vec(well_vec)$row
+parse_well_vec(well_vec)$col
+
+parse_well_vec(data_raw$well)
+```
+
+
+
 
 
 

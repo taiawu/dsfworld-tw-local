@@ -40,12 +40,22 @@ nest_raw <- function( data_raw ) {
     plyr::mutate(condition = well)
 }
 
+# parse_well_vec <- function( well_vec ){
+#   l <- list(
+#     col =  parse_number(well_vec),
+#     row = str_extract_all(well_vec, "[A-Z; a-z]", simplify = TRUE) 
+#     %>% str_to_upper(locale = "en") 
+#     %>% as_vector()
+#   )
+#   l
+# }
 parse_well_vec <- function( well_vec ){
+  col <- parse_number(well_vec) %>% as.character() # pull out all numbers. if no numbers, 
+  row <- str_remove(well_vec, col %>% replace_na(replace = "1"))
+  
   l <- list(
-    col =  parse_number(well_vec),
-    row = str_extract_all(well_vec, "[A-Z; a-z]", simplify = TRUE) 
-    %>% str_to_upper(locale = "en") 
-    %>% as_vector()
+    col =  col,
+    row = row %>% str_to_upper(locale = "en") %>% as_vector()
   )
   l
 }
