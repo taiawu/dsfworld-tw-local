@@ -153,7 +153,39 @@ server <- function(session, input, output) {
     }) # read the input file
     
     move_to_analysis <- FALSE # set this as false to start
-    observeEvent(data_raw(), {
+    # observeEvent({ id$inTabset_analysis
+    #                input$jumpToAnalysis }, { # ultimately, observe the transfer to the analysis page
+    # open_analysis_tab <- FALSE
+    # if ( input$inTabset_analysis == "analysis_tab" ) {
+    #     open_analysis_tab <- TRUE   
+    # }
+    
+   # observeEvent(input$inTabset_analysis , {
+      panel <- reactive({ input$inTabset_analysis  }) 
+      observeEvent(input$inTabset_analysis, {
+          print("panel changed")
+          print(panel())
+      })
+     # print("panel change")
+     # print(panel())
+        # print(input$inTabset_analysis)
+        # panel_change <- panel_change + 1
+   # })
+     # list(input$test1,input$test2)
+   #data_raw_counter <- reactive({ 0})  #reactive({0
+   counter <- reactiveValues(data_upload = 0,
+                             data_process = 0)
+   
+   toListen <- reactive({
+       list(input$inTabset_analysis, counter$data_upload)
+   })
+   
+    observeEvent( toListen()        , {
+         print("tirggered win3d calc")
+         print(input$inTabset_analysis)
+         req(input$inTabset_analysis == "analysis_tab") # hwo to require that something be true, rather than existing? # only proceed if the user is on the analysis tab
+         req(data_raw())
+         print("passed the req tabset")
         #values$data_raw <- data_raw()
         
         # set the following values based on the data
@@ -166,6 +198,7 @@ server <- function(session, input, output) {
             win3d <<- floor(3/((n2r(1) - n2r(0))/n_meas))
             if ( win3d < 5 ) { win3d <<- 5 }
             sgfilt_nest <<- sgfilt_set_n(n_ = find_sgolay_width( win3d ))
+            counter$data_process <- counter$data_process + 1  #data_raw_counter() <- data_raw_counter() + 1 ##### THIS SEEMS TO FAIL FIX THIS FIRST
             move_to_analysis <<- TRUE
         },   
         error = function(e) {
@@ -180,15 +213,16 @@ server <- function(session, input, output) {
             move_to_analysis <<- FALSE
         })
     }) # write to values
+
     
-    # observeEvent({ id$inTabset_analysis
-    #                input$jumpToAnalysis }, { # ultimately, observe the transfer to the analysis page
-    observeEvent({ data_raw() }, { # ultimately, observe the transfer to the analysis page
+    #observeEvent({ data_raw() }, { # ultimately, observe the transfer to the analysis page
+    observeEvent(counter$data_process, {
         req(data_raw()) # but leave this requirement as is
         if (move_to_analysis == FALSE) {
             shinyalert("Please ensure that your data is formatted correctly", "In the 'upload data' tab, you data should be displayed with Temperature in the first column, and RFU data in the columns to the right.")  
         }
-        
+       # print(input$inTabset_analysis)
+        #req(input$inTabset_analysis == "analysis_tab")
         req(move_to_analysis == TRUE)
         tryCatch({
             print("assigning values$df")
@@ -1200,7 +1234,7 @@ ui <- navbarPage(useShinyalert(),
                                                    mainPanel(
                                                        tags$style(type='text/css', "#instructions {font-size: 18px; line-height: +2;} "),
                                                        #HTML("instructions"),
-                                                       dataTableOutput("input_file"), style = "overflow-x: scroll;"
+                                                       dataTableOutput("input_file") %>% withSpinner(color="#525252"), style = "overflow-x: scroll;"
                                                    ) # end main panel
                                                ) # end sidebarLayout
                                                
