@@ -730,7 +730,21 @@ server <- function(session, input, output) {
             discard(~all(is.na(.x))) #%>% # get rid of the columns which are all NA (true if the model is not selected)
         # write_rds(values$df_tm_models_table, "values_df_tm_models_table.rds")
         # write_rds(values$s1_list, "values_s1_list.rds")
-
+        model_name_all <- c("s1_pred", "s1_d_pred", "s2_pred", "s2_d_pred") # doesn't need to be in the server or the observer but is fast enough to justify, since it makes the next step clearer
+        model_name_true <- reactive({model_name_all[c(input$s1, input$s1_d, input$s2, input$s2_d)]})
+        
+        values$df_models_filt <- values$df_models %>% dplyr::filter(which_model %in% model_name_true())
+        values$df_BIC_models_filt <- values$df_BIC_models %>% dplyr::filter(which_model %in% model_name_true())
+        
+        values$df_models_p <- cond_df_model_for_plot( values$df_models_filt, values$df_BIC_models_filt  )
+        
+        values$df_BIC_models_p <- values$df_BIC_models_filt %>%
+            cond_df_BIC_for_plot (  ) # adds is_min #readRDS("../4_analyze/values_df__BIC_models.rds")
+        
+        values$df_BIC_best <-  cond_df_BIC_for_plot ( values$df_BIC_models_filt   ) %>%
+            filter(is_min == TRUE) %>%
+            select(c(well, condition, which_model))
+        
         # if new data is uploaded, reset all of the buttons as well. perhaps we should set these to watch values$data (unnamed), so it doesn't get over-written by renaming, but i'd need to think more carefully about how to incorporate the names downstream....
         updateButton(session, "s1",  value = TRUE)
         updateButton(session, "s1_d",  value = FALSE)
@@ -1044,6 +1058,61 @@ server <- function(session, input, output) {
     
     ##### end downloads
     
+    #### instructions panel download layouts
+    output$download_ex_layout_96_well <- downloadHandler(
+        filename = function() {
+            paste('dsfworld_one_variable_layout_96_well.csv', sep='')
+        },
+        content = function(file) {
+            read_csv("dsfworld_one_variable_layout_96_well.csv")
+            write.csv(read_csv("dsfworld_one_variable_layout_96_well.csv"), file, row.names = FALSE)
+        }
+    )
+    
+    output$download_ex_layout_1 <- downloadHandler(
+        filename = function() {
+            paste('dsfworld_one_variable_layout.csv', sep='')
+        },
+        content = function(file) {
+            read_csv("dsfworld_one_variable_layout.csv")
+            write.csv(read_csv("dsfworld_one_variable_layout.csv"), file, row.names = FALSE)
+        }
+    )
+    
+    output$download_ex_layout_2 <- downloadHandler(
+        filename = function() {
+            paste('dsfworld_two_variable_layout.csv', sep='')
+        },
+        content = function(file) {
+            read_csv("dsfworld_two_variable_layout.csv")
+            write.csv(read_csv("dsfworld_two_variable_layout.csv"), file, row.names = FALSE)
+        }
+    )
+    
+    output$download_ex_layout_3 <- downloadHandler(
+        filename = function() {
+            paste('dsfworld_four_variable_layout.csv', sep='')
+        },
+        content = function(file) {
+            read_csv("dsfworld_four_variable_layout.csv")
+            write.csv(read_csv("dsfworld_four_variable_layout.csv"), file, row.names = FALSE)
+        }
+    )
+    
+    ## download the paper
+    output$download_paper <- downloadHandler(
+        filename = "20200318_dsfworld_preprint.pdf",
+        content = function(file) {
+            file.copy("20200318_dsfworld_preprint.pdf", file)
+        }
+    )
+    
+    output$download_SI <- downloadHandler(
+        filename = "20200318_dsfworld_preprint_SI.pdf",
+        content = function(file) {
+            file.copy("20200318_dsfworld_preprint_SI.pdf", file)
+        }
+    )
     
     
     } # end server
@@ -1489,19 +1558,123 @@ ui <- navbarPage(useShinyalert(),
                                       ), # end tabPanel
                                       
                                       
-                                      tabPanel(p("instructions", style = "font-family: 'Avenir Next'; font-size: 15px; color: black",align = "center"), value = "instructions_tab") # end tabPanel
+                                      tabPanel(p("instructions", style = "font-family: 'Avenir Next'; font-size: 15px; color: black",align = "center"), value = "instructions_tab",
+                                               
+                                               column(3),
+                                               column(6,
+                                                      tags$div(
+                                                          tags$h1("Instructions for DSFworld data analysis"), 
+                                                          tags$p("These instructions explain how to use DSFworld to visualize and analyze raw DSF data. For more information on the analyses performed, please see the “about the analysis” tab."),
+                                                          tags$h3("1. Upload raw data"), 
+                                                          tags$p("To use DSFworld, start by uploading your raw fluorescence versus temperature data. Before moving on to analysis, your uploaded data must be formatted with Temperature in the first column, and fluorescence readings in the columns to the right. DSFworld offers a few tools to help you do this. The uploaded data is displayed in its current format in a table to the right of the grey uploads panel to guide you."),
+                                                          # uploading image
+                                                          shiny::div(tags$img(src = "well_formatted_data.png", width = "100%"), style = "text-align: center;"),
+                                                          tags$h5("DSFworld offers some tools to help you achieve this. "),
+                                                          tags$ul(
+                                                              tags$li(tags$strong("Reformat raw from instrument."),
+                                                                      "If the data was collected on any of the instruments listed under “Reformat raw from instrument” (currently, Biorad, Stratagene, quantStudio, and qTower), raw data can be uploaded exactly as exported from the instrument and DSFworld will automatically format the data for you."), 
+                                                              tags$br(),
+                                                              tags$li(tags$strong("Pre-format by template."),
+                                                                      "If your instrument is not listed under the supported reformatting, format your data prior to uploading with Temperature in the first column, and fluorescence values for each well in the columns to the right. A properly-formatted example file can be downloaded under “Uploading instructions” in the “upload data” tab. Be sure to save your data as a comma-separated value (csv) prior to uploading."),
+                                                              tags$br(),
+                                                              tags$li(tags$strong("Convert cycle number to temperature."),
+                                                                      "Some qPCR instruments export cycle numbers (e.g. 1, 2, 3 ...) for each measurement, instead of the temperature corresponding to that measurement. You can convert these cycle numbers to temperatures under the 'Convert cycle number to temperature' panel by setting a starting temperature, and a number of degrees to increase per cycle."),
+                                                              tags$br()
+                                                          ),
+                                                          
+                                                          tags$h5("A few tips on uploading data:"),
+                                                          tags$ul(
+                                                              tags$li(tags$strong("There is no hard limit to the number of wells you can analyze in a single upload at DSFworld."),
+                                                                      "We have tested up to full 384-well plates without trouble. However, DSFworld is not intended for use for high throughput screening. Be aware that for larger datasets (e.g. > 50 wells), displaying plots and tables will take a bit more time."), 
+                                                              tags$br(),
+                                                              tags$li(tags$strong("We strongly recommend using well names (e.g. A1, A2 ...) for your data columns."),
+                                                                      "This is the default for most instruments. While it isn't necessary for analysis, having well names for columns enables DSFworld to assign any experimental variables you define to your data in the 'layouts' portion of analysis. This is useful because it lets you make descriptive visualizations of your data (e.g. color lines based on compound concentration). If your data doesn't have well names but you want to use these features, you can overwrite your column names with well names in the uploads panel--see below for more information."), 
+                                                              tags$br(),
+                                                              tags$li(tags$strong("If data isn't upload successfully, try re-saving it as a UTF-8 csv."),
+                                                                      "(even if it is already a csv!) and re-uploading. You can do this on your computer with Save As > CSV, UTF-8 encoding."), 
+                                                          ),
+                                                          
+                                                          tags$h3("2. Analyze."), 
+                                                          tags$p("Once data is properly formatted, it can be visualized and analyzed in the analysis tab. DSFworld has features for both visualizing and analyzing the uploaded data. Apparent melting temperatures are displayed in a drop-down table at left of the analysis tab, from where they can be directly downloaded. These melting temperatures available immediately upon proceeding to the analysis tab, and do not depend on plotting or plate layouts. However, because it is always good to visualize your data before exporting processed results, the following instructions are presented in the order in which we recommend proceeding through analysis."),
+                                                          tags$ol(
+                                                              tags$li( tags$strong("Define your experimental layout."), 
+                                                                       "If you would like, you can define an experiment layout for the uploaded data--that is, what conditions were tested in each well. This is useful because it allows DSFworld to average experimental replicates for you, and more importantly, allows you to to use the plotting features of DSFworld to make plots that visualize the effects of your experimental variables."), 
+                                                              tags$p("You can define a single experimental variable by entering the variable in the editable table under 'Set plate layout and replicates' tab, and pressing 'Update names from manual table'. For replicates, enter identical names."),
+                                                              tags$p(" For more complicated experiments with more than one variable, you can define any number of experimental variables (e.g. protein, compound name, and compound concentration) by uploading a plate layout as a csv. The point of an experimental layout is to tell DSFworld what conditions are present in each well."),
+                                                              tags$p("It's often easiest to get the hang of plate layouts by looking at examples."),
+                                                              tags$ul(
+                                                                  tags$li(tags$strong("Here's an example of a simple layout with only one variable."),
+                                                                          "In this example, DSF was performed on three different mutants of a protein. The name of the experimental variable is entered to the left of the block--in this example, its 'Mutant'."), 
+                                                                  downloadButton("download_ex_layout_1", "Download one variable layout example", width = '50%',style="font-size: 14px; color: #00000; background-color: #fffff; border-color: #ffff"),
+                                                                  downloadButton("download_ex_layout_96_well", "Download one variable layout example, 96-well", width = '50%',style="font-size: 14px; color: #00000; background-color: #fffff; border-color: #ffff"),
+                                                                  tags$p(),
+                                                                  tags$br(),
+                                                                  tags$li(tags$strong("Here's an example of a layout with two variables."),
+                                                                          "SYPRO Orange concentration, and protein concentration. The second variable is defined in a new block, directly below the first. This is a layout for an experiment in which we compared DSF data collected for lysozyme (10 µM SYPRO Orange, 1 µM lysozyme) to three different negative controls: buffer alone, 10 µM SYPRO Orange without protein, and 1 µM lysozyme without dye. Fun fact: this is the experimental layout that we use to test whether a new batch of microtiter plates is compatible with DSF. It's the same one used to generate the data presented in Figure 3a and Supplemental Figure 4 of the paper associated with this website."), 
+                                                                  downloadButton("download_ex_layout_2", "Download two variable layout example", width = '50%',style="font-size: 14px; color: #00000; background-color: #fffff; border-color: #ffff"),
+                                                                  tags$p(),
+                                                                  tags$br(),
+                                                                  tags$li(tags$strong("Here's an example of a layout for a more complicated experiment."),
+                                                                          "This time there are four variables: SYPRO Orange concentration, compound, compound concentration, and protein concentration. Like before, each experimental variable is defined in its own block, and each new block is pasted directly below the block above it, and the name of that variable defined in the left-most column. This is a layout for an experiment in which we tested the impact of aggregation of four compounds (vemurafenib, miconazole, clotrimazole, and ritonavir) on DSF signal in the absence and presence of lysozyme. Fun fact: this is the experimental layout used to generate some of the results presented in Figure 4 and Supplementary Figures 5-7 of the paper associated with this website."),
+                                                                  downloadButton("download_ex_layout_3", "Download four variable layout example", width = '50%',style="font-size: 14px; color: #00000; background-color: #fffff; border-color: #ffff"),
+                                                                  tags$p(),
+                                                                  tags$br()
+                                                              ),
+                                                              tags$li(tags$strong("Make custom plots."), 
+                                                                      tags$p("The uploaded experimental variables are automatically made available for the creation of custom plots. These variables can be used to create sub-plots, vary color, or vary line-type. Any wells which are identical in all experimental variables are considered replicates, and data can be plotted either as individual replicates, or as means with standard deviations. For sub-plots, the y-axes can be fixed as equal, or allowed to vary between the sub-plots."),
+                                                                      tags$p("The following plot aesthetics can also be customized: titles for the plot, legend, and x and y axes can be set; text size can be altered; and the legend (for colors and/or linetypes) can be shown or hidden."),
+                                                                      tags$p("To apply changes to a plot, press the 'Update plot' button. The currently displayed plot can be downloaded from the analysis window using the 'Download plot' button.")), 
+                                                              
+                                                              tags$li(tags$strong("Determine apparent melting temperatures."), "Apparent melting temperatures can be calculated by either the maximum of the first derivative, or by sigmoid fitting. For more information on the analysis methods, see the 'about the analysis' tab."),
+                                                              tags$ul(
+                                                                  tags$li( tags$strong("Maximum of the first derivative (dRFU)"), 
+                                                                           "Apparent melting temperatures are calculated by maximum of the first derivative automatically. Experimental replicates are averaged automatically. Results without replicate averaging can be downloaded from the Downloads tab."), 
+                                                                  tags$li( tags$strong("Sigmoid fitting"), 
+                                                                           tags$p("DSFworld offers four different models for sigmoid fitting, termed 'Fit 1', 'Fit 2', 'Fit 3', and 'Fit 4'. Upon uploading, apparent melting temperatures are automatically calculated by Fit 1. Additional models can be fit to the data by clicking the buttons for that fit in the 'By sigmoid fitting' drop-down menu."),
+                                                                           tags$p("You can trim the temperature range used for the fits using the slider-bar."),
+                                                                           tags$p("If multiple fits are applied to the data, DSFworld will automatically display the Fit with the lowest Bayesian Information Criterion (BIC). However, the best fit can also be selected manually. To do this, open the 'Select the best fit for each dataset'  dropdown tab. A table is displayed in this drop-down window which shows the currently-selected fit for each data set. Click the 'Display/update fit plot.' button. A new plot will be shown in the plot panel. This plot is specifically designed to facilitate manual fit selection. Each individual sub-plot shows a single data set, with one Fit option. Each row of sub-plots contains an individual data set, and each column shows a fit option. To select a particular fit option for a given data set, double click on that sub-plot."),
+                                                                           tags$p("To plot only the selected fits, press the 'Plot selected fits' button.")
+                                                                  )
+                                                              )
+                                                          ),
+                                                          tags$h3("3. Download."),
+                                                          tags$p("All plots and replicate-averaged apparent melting temperatures can be downloaded directly from the analysis window. However, if you would like to download additional forms of the data, this can be done in the 'download results' panel. If you would like to download results for a particular fit, you must first select that fit in the data analysis window.")),
+                                                      tags$br(),
+                                                      tags$br()),
+                                               column(3)
+                                               
+                                               
+                                               ) # end tabPanel
                           )), # end tabset Panel (contains all "analysis sub-panels)
                  tabPanel( p(" . . .", style = "font-family: 'Avenir Next'; font-size: 20px; color: grey",align = "center"), value = "closing_remarks_tab",
-                           column(4,
-                                  shiny::div(tags$img(src = "dsfworld_logo_grey.png", width = "400px"), style = "text-align: center;")
-                           ),
-                           column(6,
-                                  p("DSFworld was created, and is maintained, by the Gestwicki Lab at the University of California San Francisco.", style = "font-family: 'Avenir Next'; font-size: 20px",align = "left"),
-                                  p("We created DSFworld to make DSF more accessible. We're always open to feedback, so don't hesitate to email dsfworlducsf (at) gmail (dot) com if you have comments or questions.", style = "font-family: 'Avenir Next'; font-size: 15px",align = "left"),
-                                  p("DSFworld is written in R, as are all associated scripts. Therefore, DSFworld is indebted to the creators of R, RShiny, and the many software packages used herein. These packages are: shiny, shinydashboard, shinythemes, shinyjs, rhandsontable, shinyWidgets, shinyBS, DT;  ggplot2, platetools, viridis;  readxl, readr, signal, stats,  matrixStats, SciViews, nnet, baseline, peakPick, naniar;  tidyr, dplyr, purrr, tibble, base, magrittr, and reshape2; please forgive our crude implementations. Thanks also to the countless users of StackOverflow and GitHub, whose questions and answers smoothed many hurdles during the creation of this website. ", style = "font-family: 'Avenir Next'; font-size: 15px",align = "left"),
-                                  p("Thank you also to our many dedicated beta testers, without whom using this application would likely be a terrible experience; you know who you are.", style = "font-family: 'Avenir Next'; font-size: 15px",align = "left")
-                           ),
-                           column(2)))
+                           tabPanel( p(" . . .", style = "font-family: 'Avenir Next'; font-size: 20px; color: grey",align = "center"), value = "closing_remarks_tab",
+                                     column(4,
+                                            shiny::div(tags$img(src = "dsfworld_logo_grey.png", width = "400px"), style = "text-align: center;")
+                                     ),
+                                     column(6,
+                                            tags$br(),
+                                            tags$br(),
+                                            tags$p("DSFworld was created to help users complete more successful DSF experiments."), 
+                                            #tags$p("We hope that the interactive models and data analyses offered here can help users develop a strong working relationship with DSF results--both the underlying concepts and real data."),
+                                            tags$p("The code for DSFworld is available on GitHub from https://github.com/gestwicki-lab/dsfworld. This includes the full code for this website and all associated scripts, as well as modular mini-web applications for each of the tasks tackled here: interactive modeling, data uploading, data layouts, plotting, analyses, and downloads."),
+                                            tags$p("DSFworld is presented in a publication, alongside practical tips for DSF and a deeper discussion of Model 2. You can download a version of that paper, and its supplementary information below."),
+                                            downloadButton("download_paper", "Download the full paper", width = '50%',style="font-size: 14px; color: #00000; background-color: #fffff; border-color: #ffff"),
+                                            downloadButton("download_SI", "Download the supplementary information", width = '50%',style="font-size: 14px; color: #00000; background-color: #fffff; border-color: #ffff"),
+                                            tags$p(),
+                                            tags$br(),
+                                            tags$p("Thank you to the many beta-testers of DSFworld, especially Ziyang Zhang, Douglas Wassarman, and Sarah Williams."),
+                                            tags$p("DSFworld is written in R. we're indebted to the many creators of R, R Studio, and the R packages who made this project possible. Particularly, thank you to Joe Cheng, Hadley Wickham, and their teams for creating R Shiny and the tidyverse."),
+                                            
+                                            tags$ul(
+                                                tags$li("The user interface was created using R Shiny, as well as the packages shinyBS for drop-down panels, shinyalert for pop-up messages, shinycssloaders for busy spinners, and rhandsontable for manual entry and editing of condition names in the analysis window. "), 
+                                                tags$br(),
+                                                tags$li("The model fitting uses modelr and broom for data and model handling, minpack.lm for fitting, signal for Savistky-Golay filtering, quantmod to assist in the finding of local maximima and minima for starting parameter estimates, and SciViews to perform natural logarithms."),
+                                                tags$br(),
+                                                tags$br()
+                                                )),
+                                     column(2))# end tabpanel
+                           )
+                 )
 ###### END GUI #####
 
 shinyApp(ui = ui, server = server)
