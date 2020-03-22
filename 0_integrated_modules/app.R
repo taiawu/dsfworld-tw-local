@@ -1481,7 +1481,6 @@ ui <- navbarPage(useShinyalert(),
                                                        )
                                                    ) # end main panel
                                                ) # end sidebarLayout
-                                               
                                                ##### end downloads applet GUI
                                       ), # end tabpanel
                                       # About the analysis ------

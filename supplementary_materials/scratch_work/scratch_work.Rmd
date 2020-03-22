@@ -1233,9 +1233,12 @@ parse_well_vec(data_raw$well)
 
 
 
+![Caption for the picture.](sample_pic.png)
 
 
+```{r}
 
+```
 
 
 
